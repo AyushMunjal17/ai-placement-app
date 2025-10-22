@@ -15,7 +15,9 @@ import {
   Eye,
   Code,
   Clock,
-  HardDrive
+  HardDrive,
+  Upload,
+  File
 } from 'lucide-react'
 
 const CreateProblem = () => {
@@ -399,23 +401,67 @@ const CreateProblem = () => {
                   <div>
                     <label className="text-sm font-medium">Input *</label>
                     <Textarea
-                      placeholder="Sample input"
+                      placeholder="Sample input or paste large input here"
                       value={testCase.input}
                       onChange={(e) => handleSampleTestCaseChange(index, 'input', e.target.value)}
                       disabled={loading}
                       rows={3}
                     />
+                    <div className="mt-2">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-blue-600 hover:text-blue-700">
+                        <Upload className="h-4 w-4" />
+                        Upload Input File (.txt)
+                        <input
+                          type="file"
+                          accept=".txt"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files[0]
+                            if (file) {
+                              const reader = new FileReader()
+                              reader.onload = (event) => {
+                                handleSampleTestCaseChange(index, 'input', event.target.result)
+                              }
+                              reader.readAsText(file)
+                            }
+                          }}
+                          disabled={loading}
+                        />
+                      </label>
+                    </div>
                   </div>
                   
                   <div>
                     <label className="text-sm font-medium">Expected Output *</label>
                     <Textarea
-                      placeholder="Expected output"
+                      placeholder="Expected output or paste large output here"
                       value={testCase.expectedOutput}
                       onChange={(e) => handleSampleTestCaseChange(index, 'expectedOutput', e.target.value)}
                       disabled={loading}
                       rows={3}
                     />
+                    <div className="mt-2">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-blue-600 hover:text-blue-700">
+                        <Upload className="h-4 w-4" />
+                        Upload Output File (.txt)
+                        <input
+                          type="file"
+                          accept=".txt"
+                          className="hidden"
+                          onChange={(e) => {
+                            const file = e.target.files[0]
+                            if (file) {
+                              const reader = new FileReader()
+                              reader.onload = (event) => {
+                                handleSampleTestCaseChange(index, 'expectedOutput', event.target.result)
+                              }
+                              reader.readAsText(file)
+                            }
+                          }}
+                          disabled={loading}
+                        />
+                      </label>
+                    </div>
                   </div>
                 </div>
 
@@ -450,66 +496,150 @@ const CreateProblem = () => {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <HardDrive className="h-5 w-5" />
-              Hidden Test Cases
+              Hidden Test Cases (Bulk Upload)
             </CardTitle>
             <CardDescription>
-              These test cases will be used for evaluation but won't be visible to users
+              Upload all hidden test cases in a single file. Format: Each test case separated by "---"
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {formData.hiddenTestCases.map((testCase, index) => (
-              <div key={index} className="border rounded-lg p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="font-medium">Hidden Test Case {index + 1}</h4>
-                  {formData.hiddenTestCases.length > 1 && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => removeHiddenTestCase(index)}
-                      disabled={loading}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
+            {/* Bulk Upload Section */}
+            <div className="border-2 border-dashed rounded-lg p-6 space-y-4">
+              <div className="text-center">
+                <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-2" />
+                <h3 className="font-medium mb-2">Upload Hidden Test Cases File</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Upload a .txt file containing all hidden test cases
+                </p>
                 
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-sm font-medium">Input *</label>
-                    <Textarea
-                      placeholder="Hidden test input"
-                      value={testCase.input}
-                      onChange={(e) => handleHiddenTestCaseChange(index, 'input', e.target.value)}
-                      disabled={loading}
-                      rows={3}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="text-sm font-medium">Expected Output *</label>
-                    <Textarea
-                      placeholder="Expected output"
-                      value={testCase.expectedOutput}
-                      onChange={(e) => handleHiddenTestCaseChange(index, 'expectedOutput', e.target.value)}
-                      disabled={loading}
-                      rows={3}
-                    />
-                  </div>
+                <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg cursor-pointer hover:bg-blue-700">
+                  <File className="h-4 w-4" />
+                  Choose File
+                  <input
+                    type="file"
+                    accept=".txt"
+                    className="hidden"
+                    onChange={(e) => {
+                      const file = e.target.files[0]
+                      if (file) {
+                        const reader = new FileReader()
+                        reader.onload = (event) => {
+                          const content = event.target.result
+                          // Parse the file content
+                          const testCases = content.split('---').map(tc => tc.trim()).filter(tc => tc)
+                          const parsedTestCases = testCases.map(tc => {
+                            const parts = tc.split('###OUTPUT###')
+                            return {
+                              input: parts[0]?.replace('###INPUT###', '').trim() || '',
+                              expectedOutput: parts[1]?.trim() || ''
+                            }
+                          })
+                          
+                          if (parsedTestCases.length > 0) {
+                            setFormData(prev => ({
+                              ...prev,
+                              hiddenTestCases: parsedTestCases
+                            }))
+                            setSuccess(`Successfully loaded ${parsedTestCases.length} hidden test cases!`)
+                            setTimeout(() => setSuccess(''), 3000)
+                          }
+                        }
+                        reader.readAsText(file)
+                      }
+                    }}
+                    disabled={loading}
+                  />
+                </label>
+              </div>
+
+              <div className="bg-muted p-4 rounded text-sm space-y-2">
+                <p className="font-medium">File Format:</p>
+                <pre className="bg-background p-2 rounded overflow-x-auto text-xs">
+{`###INPUT###
+4 9
+2 7 11 15
+###OUTPUT###
+0 1
+---
+###INPUT###
+4 6
+3 2 4
+###OUTPUT###
+1 2
+---
+###INPUT###
+1000 1999
+1 2 3 4 ... (large input)
+###OUTPUT###
+998 999`}
+                </pre>
+                <p className="text-xs text-muted-foreground">
+                  • Use <code className="bg-background px-1 rounded">###INPUT###</code> before input data
+                  <br />
+                  • Use <code className="bg-background px-1 rounded">###OUTPUT###</code> before output data
+                  <br />
+                  • Separate test cases with <code className="bg-background px-1 rounded">---</code>
+                </p>
+              </div>
+            </div>
+
+            {/* Display loaded test cases */}
+            {formData.hiddenTestCases.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-medium">
+                    Loaded Test Cases: {formData.hiddenTestCases.length}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFormData(prev => ({
+                        ...prev,
+                        hiddenTestCases: [{ input: '', expectedOutput: '' }]
+                      }))
+                    }}
+                    disabled={loading}
+                  >
+                    Clear All
+                  </Button>
+                </div>
+
+                <div className="max-h-64 overflow-y-auto space-y-2">
+                  {formData.hiddenTestCases.map((testCase, index) => (
+                    <div key={index} className="border rounded p-3 bg-muted/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-sm font-medium">Test Case {index + 1}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeHiddenTestCase(index)}
+                          disabled={loading}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="font-medium">Input:</span>
+                          <pre className="bg-background p-1 rounded mt-1 overflow-hidden text-ellipsis">
+                            {testCase.input.substring(0, 50)}{testCase.input.length > 50 ? '...' : ''}
+                          </pre>
+                        </div>
+                        <div>
+                          <span className="font-medium">Output:</span>
+                          <pre className="bg-background p-1 rounded mt-1 overflow-hidden text-ellipsis">
+                            {testCase.expectedOutput.substring(0, 50)}{testCase.expectedOutput.length > 50 ? '...' : ''}
+                          </pre>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-            ))}
-
-            <Button
-              type="button"
-              variant="outline"
-              onClick={addHiddenTestCase}
-              disabled={loading}
-              className="w-full"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Add Hidden Test Case
-            </Button>
+            )}
           </CardContent>
         </Card>
 

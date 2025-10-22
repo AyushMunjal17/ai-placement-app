@@ -182,11 +182,11 @@ const executeCode = async (code, languageId, stdin = '') => {
 };
 
 // @route   POST /api/submissions/run
-// @desc    Run code without saving submission
+// @desc    Run code with sample test cases validation
 // @access  Private
 router.post('/run', authenticateToken, async (req, res) => {
   try {
-    const { code, language_id, stdin = '' } = req.body;
+    const { code, language_id, problemId, stdin = '' } = req.body;
 
     if (!code || !language_id) {
       return res.status(400).json({
@@ -195,6 +195,90 @@ router.post('/run', authenticateToken, async (req, res) => {
       });
     }
 
+    // If problemId is provided, run against sample test cases
+    if (problemId) {
+      const problem = await Problem.findById(problemId);
+      if (!problem) {
+        return res.status(404).json({
+          message: 'Problem not found',
+          error: 'PROBLEM_NOT_FOUND'
+        });
+      }
+
+      // Run against sample test cases only
+      const testResults = [];
+      let allPassed = true;
+      let totalPassed = 0;
+
+      for (let i = 0; i < problem.sampleTestCases.length; i++) {
+        const testCase = problem.sampleTestCases[i];
+        const input = testCase.isFileBased ? testCase.inputFile : testCase.input;
+        
+        try {
+          const result = await executeCode(code, language_id, input);
+          
+          let passed = false;
+          let status = 'Failed';
+          let error = null;
+          let actualOutput = '';
+
+          if (result.compile_output) {
+            error = result.compile_output;
+            status = 'Compilation Error';
+          } else if (result.stderr) {
+            error = result.stderr;
+            status = 'Runtime Error';
+          } else if (result.status.id === 3) { // Accepted
+            actualOutput = result.stdout.trim();
+            const expectedOutput = (testCase.isFileBased ? testCase.outputFile : testCase.expectedOutput).trim();
+            passed = actualOutput === expectedOutput;
+            
+            if (passed) {
+              status = 'Passed';
+              totalPassed++;
+            } else {
+              status = 'Wrong Answer';
+              allPassed = false;
+            }
+          } else {
+            error = result.status.description;
+            status = result.status.description;
+            allPassed = false;
+          }
+
+          if (!passed) allPassed = false;
+
+          testResults.push({
+            testCaseNumber: i + 1,
+            input: testCase.input.length > 100 ? testCase.input.substring(0, 100) + '...' : testCase.input,
+            expectedOutput: testCase.expectedOutput.length > 100 ? testCase.expectedOutput.substring(0, 100) + '...' : testCase.expectedOutput,
+            actualOutput: actualOutput.length > 100 ? actualOutput.substring(0, 100) + '...' : actualOutput,
+            passed,
+            status,
+            error,
+            time: result.time,
+            memory: result.memory
+          });
+        } catch (error) {
+          allPassed = false;
+          testResults.push({
+            testCaseNumber: i + 1,
+            passed: false,
+            status: 'Error',
+            error: error.message
+          });
+        }
+      }
+
+      return res.json({
+        verdict: allPassed ? 'Accepted' : 'Failed',
+        totalTestCases: problem.sampleTestCases.length,
+        passedTestCases: totalPassed,
+        testResults
+      });
+    }
+
+    // If no problemId, run with custom input (original behavior)
     const result = await executeCode(code, language_id, stdin);
 
     let output = '';
@@ -284,9 +368,13 @@ router.post('/submit', authenticateToken, async (req, res) => {
         if (passed) passedCount++;
 
         results.push({
-          testCase: i + 1,
+          testCaseNumber: i + 1,
           type: testCase.type,
+          input: testCase.type === 'sample' ? (testCase.input.length > 100 ? testCase.input.substring(0, 100) + '...' : testCase.input) : 'Hidden',
+          expectedOutput: testCase.type === 'sample' ? (testCase.expectedOutput.length > 100 ? testCase.expectedOutput.substring(0, 100) + '...' : testCase.expectedOutput) : 'Hidden',
+          actualOutput: testCase.type === 'sample' && result.stdout ? (result.stdout.trim().length > 100 ? result.stdout.trim().substring(0, 100) + '...' : result.stdout.trim()) : 'Hidden',
           passed,
+          status: passed ? 'Passed' : (error ? error.split(':')[0] : 'Failed'),
           error,
           time: result.time,
           memory: result.memory
@@ -294,9 +382,13 @@ router.post('/submit', authenticateToken, async (req, res) => {
 
       } catch (err) {
         results.push({
-          testCase: i + 1,
+          testCaseNumber: i + 1,
           type: testCase.type,
+          input: testCase.type === 'sample' ? testCase.input : 'Hidden',
+          expectedOutput: testCase.type === 'sample' ? testCase.expectedOutput : 'Hidden',
+          actualOutput: 'Error',
           passed: false,
+          status: 'Error',
           error: err.message,
           time: null,
           memory: null
@@ -307,15 +399,17 @@ router.post('/submit', authenticateToken, async (req, res) => {
     // Create submission record
     const submission = new Submission({
       userId: req.user._id,
+      username: req.user.username,
       problemId,
+      problemTitle: problem.title,
       code,
       language: Object.keys(LANGUAGE_IDS).find(key => LANGUAGE_IDS[key] === language_id) || 'unknown',
       status: passedCount === allTestCases.length ? 'Accepted' : 'Wrong Answer',
-      testCasesPassed: passedCount,
+      passedTestCases: passedCount,
       totalTestCases: allTestCases.length,
       executionTime: Math.max(...results.map(r => r.time || 0)),
       memoryUsed: Math.max(...results.map(r => r.memory || 0)),
-      results
+      testCaseResults: results
     });
 
     await submission.save();
@@ -340,13 +434,10 @@ router.post('/submit', authenticateToken, async (req, res) => {
     await req.user.save();
 
     res.json({
-      message: `${passedCount}/${allTestCases.length} test cases passed`,
-      status: submission.status,
-      results: results.map(r => ({
-        testCase: r.testCase,
-        passed: r.passed,
-        error: r.error
-      })),
+      verdict: submission.status,
+      totalTestCases: allTestCases.length,
+      passedTestCases: passedCount,
+      testResults: results,
       submissionId: submission._id
     });
 
@@ -354,6 +445,33 @@ router.post('/submit', authenticateToken, async (req, res) => {
     console.error('Submit solution error:', error);
     res.status(500).json({
       message: 'Failed to submit solution',
+      error: error.message
+    });
+  }
+});
+
+// @route   GET /api/submissions/problem/:problemId
+// @desc    Get user's submissions for a specific problem
+// @access  Private
+router.get('/problem/:problemId', authenticateToken, async (req, res) => {
+  try {
+    const { problemId } = req.params;
+
+    const submissions = await Submission.find({
+      userId: req.user._id,
+      problemId: problemId
+    })
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    res.json({
+      submissions
+    });
+
+  } catch (error) {
+    console.error('Get submissions error:', error);
+    res.status(500).json({
+      message: 'Failed to fetch submissions',
       error: error.message
     });
   }

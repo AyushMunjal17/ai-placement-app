@@ -45,6 +45,8 @@ const ProblemDetail = () => {
   
   // UI state
   const [activeTab, setActiveTab] = useState('description')
+  const [submissions, setSubmissions] = useState([])
+  const [loadingSubmissions, setLoadingSubmissions] = useState(false)
 
   // Language configurations
   const languages = {
@@ -63,6 +65,7 @@ const ProblemDetail = () => {
 
   useEffect(() => {
     fetchProblem()
+    fetchSubmissions()
   }, [id])
 
   useEffect(() => {
@@ -87,6 +90,18 @@ const ProblemDetail = () => {
     }
   }
 
+  const fetchSubmissions = async () => {
+    try {
+      setLoadingSubmissions(true)
+      const response = await axios.get(`/submissions/problem/${id}`)
+      setSubmissions(response.data.submissions || [])
+    } catch (err) {
+      console.error('Fetch submissions error:', err)
+    } finally {
+      setLoadingSubmissions(false)
+    }
+  }
+
   const runCode = async () => {
     if (!code.trim()) {
       setOutput('Please write some code first!')
@@ -96,16 +111,24 @@ const ProblemDetail = () => {
 
     setIsRunning(true)
     setOutput('')
+    setTestResults([])
     setShowOutput(true)
 
     try {
       const response = await axios.post('/submissions/run', {
         code,
         language_id: languages[language].id,
-        stdin: problem?.sampleTestCases?.[0]?.input || ''
+        problemId: id
       })
 
-      setOutput(response.data.output || response.data.error || 'No output')
+      // Check if response has test results (new format)
+      if (response.data.testResults) {
+        setTestResults(response.data.testResults)
+        setOutput('')
+      } else {
+        // Fallback to old format (custom input)
+        setOutput(response.data.output || response.data.error || 'No output')
+      }
     } catch (err) {
       setOutput('Error running code: ' + (err.response?.data?.message || err.message))
     } finally {
@@ -122,6 +145,7 @@ const ProblemDetail = () => {
 
     setIsSubmitting(true)
     setTestResults([])
+    setOutput('')
     setShowOutput(true)
 
     try {
@@ -131,8 +155,16 @@ const ProblemDetail = () => {
         language_id: languages[language].id
       })
 
-      setTestResults(response.data.results || [])
-      setOutput(response.data.message || 'Submission completed')
+      // Handle new format with detailed test results
+      if (response.data.testResults) {
+        setTestResults(response.data.testResults)
+        setOutput('')
+        // Refresh submissions after successful submit
+        fetchSubmissions()
+      } else {
+        // Fallback
+        setOutput(response.data.message || 'Submission completed')
+      }
     } catch (err) {
       setOutput('Error submitting solution: ' + (err.response?.data?.message || err.message))
     } finally {
@@ -302,9 +334,68 @@ const ProblemDetail = () => {
             )}
 
             {activeTab === 'submissions' && (
-              <div className="text-center text-muted-foreground">
-                <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                <p>Your submission history will appear here</p>
+              <div>
+                {loadingSubmissions ? (
+                  <div className="text-center py-8">
+                    <Loader2 className="h-8 w-8 animate-spin mx-auto" />
+                    <p className="text-sm text-muted-foreground mt-2">Loading submissions...</p>
+                  </div>
+                ) : submissions.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">
+                    <Trophy className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No submissions yet. Submit your solution to see it here!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <h3 className="font-semibold text-lg mb-4">Your Submissions ({submissions.length})</h3>
+                    {submissions.map((submission, index) => (
+                      <div key={submission._id || index} className={`border rounded-lg p-4 ${
+                        submission.status === 'Accepted' 
+                          ? 'border-green-300 bg-green-50/50' 
+                          : 'border-red-300 bg-red-50/50'
+                      }`}>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            {submission.status === 'Accepted' ? (
+                              <CheckCircle className="h-5 w-5 text-green-600" />
+                            ) : (
+                              <AlertCircle className="h-5 w-5 text-red-600" />
+                            )}
+                            <span className={`font-semibold ${
+                              submission.status === 'Accepted' ? 'text-green-700' : 'text-red-700'
+                            }`}>
+                              {submission.status}
+                            </span>
+                          </div>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(submission.createdAt).toLocaleString()}
+                          </span>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                          <div>
+                            <span className="text-muted-foreground">Language:</span>
+                            <p className="font-medium">{submission.language}</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Test Cases:</span>
+                            <p className="font-medium">
+                              {submission.passedTestCases || 0}/{submission.totalTestCases || 0}
+                            </p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Time:</span>
+                            <p className="font-medium">{submission.executionTime || 0}s</p>
+                          </div>
+                          <div>
+                            <span className="text-muted-foreground">Memory:</span>
+                            <p className="font-medium">{Math.round((submission.memoryUsed || 0) / 1024)}KB</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -376,34 +467,102 @@ const ProblemDetail = () => {
 
           {/* Output Panel */}
           {showOutput && (
-            <div className="border-t bg-muted/30 p-4 max-h-48 overflow-auto">
-              <div className="flex items-center gap-2 mb-2">
+            <div className="border-t bg-muted/30 p-4 max-h-64 overflow-auto">
+              <div className="flex items-center gap-2 mb-3">
                 <Terminal className="h-4 w-4" />
                 <span className="text-sm font-medium">Output</span>
               </div>
               
               {testResults.length > 0 ? (
-                <div className="space-y-2">
+                <div className="space-y-3">
+                  {/* Verdict Summary */}
+                  <div className={`p-3 rounded-lg border-2 ${
+                    testResults.every(r => r.passed) 
+                      ? 'bg-green-50 border-green-500 text-green-800' 
+                      : 'bg-red-50 border-red-500 text-red-800'
+                  }`}>
+                    <div className="flex items-center gap-2 font-semibold">
+                      {testResults.every(r => r.passed) ? (
+                        <CheckCircle className="h-5 w-5" />
+                      ) : (
+                        <AlertCircle className="h-5 w-5" />
+                      )}
+                      <span>
+                        {testResults.every(r => r.passed) ? '✅ Accepted' : '❌ Failed'}
+                      </span>
+                    </div>
+                    <div className="text-sm mt-1">
+                      Test Cases Passed: {testResults.filter(r => r.passed).length}/{testResults.length}
+                    </div>
+                  </div>
+
+                  {/* Individual Test Results */}
                   {testResults.map((result, index) => (
-                    <div key={index} className={`p-2 rounded text-sm ${
-                      result.passed ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'
+                    <div key={index} className={`border rounded-lg p-3 ${
+                      result.passed 
+                        ? 'border-green-300 bg-green-50/50' 
+                        : 'border-red-300 bg-red-50/50'
                     }`}>
-                      <div className="flex items-center gap-2">
-                        {result.passed ? (
-                          <CheckCircle className="h-4 w-4" />
-                        ) : (
-                          <AlertCircle className="h-4 w-4" />
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {result.passed ? (
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                          ) : (
+                            <AlertCircle className="h-4 w-4 text-red-600" />
+                          )}
+                          <span className="font-medium text-sm">
+                            Test Case {result.testCaseNumber}: {result.status}
+                          </span>
+                        </div>
+                        {result.time && (
+                          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Clock className="h-3 w-3" />
+                              {result.time}s
+                            </span>
+                            {result.memory && (
+                              <span className="flex items-center gap-1">
+                                <HardDrive className="h-3 w-3" />
+                                {Math.round(result.memory / 1024)}KB
+                              </span>
+                            )}
+                          </div>
                         )}
-                        Test Case {index + 1}: {result.passed ? 'Passed' : 'Failed'}
                       </div>
-                      {!result.passed && result.error && (
-                        <div className="mt-1 text-xs">{result.error}</div>
+
+                      {!result.passed && (
+                        <div className="space-y-2 text-xs">
+                          {result.input && (
+                            <div>
+                              <span className="font-medium">Input:</span>
+                              <pre className="bg-white p-2 rounded border mt-1 overflow-x-auto">{result.input}</pre>
+                            </div>
+                          )}
+                          {result.expectedOutput && (
+                            <div>
+                              <span className="font-medium">Expected:</span>
+                              <pre className="bg-white p-2 rounded border mt-1 overflow-x-auto">{result.expectedOutput}</pre>
+                            </div>
+                          )}
+                          {result.actualOutput && (
+                            <div>
+                              <span className="font-medium">Your Output:</span>
+                              <pre className="bg-white p-2 rounded border mt-1 overflow-x-auto">{result.actualOutput}</pre>
+                            </div>
+                          )}
+                          {result.error && (
+                            <div>
+                              <span className="font-medium text-red-600">Error:</span>
+                              <pre className="bg-white p-2 rounded border mt-1 overflow-x-auto text-red-600">{result.error}</pre>
+                            </div>
+                          )}
+                        </div>
                       )}
                     </div>
                   ))}
                 </div>
               ) : (
-                <pre className="text-sm bg-background p-2 rounded border">{output || 'No output yet. Run your code to see results.'}</pre>
+                <pre className="text-sm bg-background p-3 rounded border">{output || 'No output yet. Run your code to see results.'}</pre>
               )}
             </div>
           )}

@@ -13,6 +13,23 @@ const testCaseSchema = new mongoose.Schema({
   explanation: {
     type: String,
     default: ''
+  },
+  // For file-based test cases
+  inputFile: {
+    type: String, // File path or content
+    default: ''
+  },
+  outputFile: {
+    type: String, // File path or content
+    default: ''
+  },
+  isFileBased: {
+    type: Boolean,
+    default: false
+  },
+  fileSize: {
+    type: Number, // Size in bytes
+    default: 0
   }
 }, { _id: false });
 
@@ -25,6 +42,23 @@ const hiddenTestCaseSchema = new mongoose.Schema({
   expectedOutput: {
     type: String,
     required: true
+  },
+  // For file-based test cases
+  inputFile: {
+    type: String,
+    default: ''
+  },
+  outputFile: {
+    type: String,
+    default: ''
+  },
+  isFileBased: {
+    type: Boolean,
+    default: false
+  },
+  fileSize: {
+    type: Number,
+    default: 0
   }
 }, { _id: false });
 
