@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const Problem = require('../models/Problem');
 const { authenticateToken, optionalAuth } = require('../middlewares/auth');
+const { isAdmin } = require('../middlewares/adminAuth');
 
 const router = express.Router();
 
@@ -175,8 +176,8 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
 // @route   POST /api/problems
 // @desc    Create a new problem
-// @access  Private
-router.post('/', authenticateToken, async (req, res) => {
+// @access  Private (Admin only)
+router.post('/', authenticateToken, isAdmin, async (req, res) => {
   try {
     const {
       title,

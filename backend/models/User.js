@@ -52,11 +52,12 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
-  // User role (for future admin features)
+  // User role
   role: {
     type: String,
-    enum: ['user', 'admin'],
-    default: 'user'
+    enum: ['student', 'admin'],
+    default: 'student',
+    required: true
   },
   // Account status
   isActive: {
@@ -106,6 +107,7 @@ userSchema.methods.getPublicProfile = function() {
     problemsSolved: this.problemsSolved,
     problemsPublished: this.problemsPublished,
     totalSubmissions: this.totalSubmissions,
+    role: this.role,
     createdAt: this.createdAt
   };
 };

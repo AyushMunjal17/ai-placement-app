@@ -9,7 +9,8 @@ import {
   PlusCircle, 
   LayoutDashboard,
   Brain,
-  FileText
+  FileText,
+  Shield
 } from 'lucide-react'
 
 const Navbar = () => {
@@ -51,21 +52,33 @@ const Navbar = () => {
 
             {isAuthenticated && (
               <>
-                <Link 
-                  to="/create-problem" 
-                  className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
-                >
-                  <PlusCircle className="h-4 w-4" />
-                  <span>Create Problem</span>
-                </Link>
-                
-                <Link 
-                  to="/dashboard" 
-                  className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
-                >
-                  <LayoutDashboard className="h-4 w-4" />
-                  <span>Dashboard</span>
-                </Link>
+                {user?.role === 'admin' ? (
+                  <>
+                    <Link 
+                      to="/create-problem" 
+                      className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+                    >
+                      <PlusCircle className="h-4 w-4" />
+                      <span>Create Problem</span>
+                    </Link>
+                    
+                    <Link 
+                      to="/admin" 
+                      className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+                    >
+                      <Shield className="h-4 w-4" />
+                      <span>Admin Dashboard</span>
+                    </Link>
+                  </>
+                ) : (
+                  <Link 
+                    to="/dashboard" 
+                    className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span>Dashboard</span>
+                  </Link>
+                )}
               </>
             )}
 
@@ -88,9 +101,16 @@ const Navbar = () => {
             {isAuthenticated ? (
               <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-2">
-                  <User className="h-4 w-4" />
+                  {user?.role === 'admin' ? (
+                    <Shield className="h-4 w-4 text-blue-600" />
+                  ) : (
+                    <User className="h-4 w-4" />
+                  )}
                   <span className="text-sm font-medium">
                     {user?.firstName} {user?.lastName}
+                    <span className="text-xs text-muted-foreground ml-1">
+                      ({user?.role})
+                    </span>
                   </span>
                 </div>
                 <Button 
@@ -134,12 +154,20 @@ const Navbar = () => {
             </Link>
             {isAuthenticated && (
               <>
-                <Link to="/create-problem">
-                  <Button variant="ghost" size="sm">Create</Button>
-                </Link>
-                <Link to="/dashboard">
-                  <Button variant="ghost" size="sm">Dashboard</Button>
-                </Link>
+                {user?.role === 'admin' ? (
+                  <>
+                    <Link to="/create-problem">
+                      <Button variant="ghost" size="sm">Create</Button>
+                    </Link>
+                    <Link to="/admin">
+                      <Button variant="ghost" size="sm">Admin</Button>
+                    </Link>
+                  </>
+                ) : (
+                  <Link to="/dashboard">
+                    <Button variant="ghost" size="sm">Dashboard</Button>
+                  </Link>
+                )}
               </>
             )}
             <Button variant="ghost" size="sm" disabled>

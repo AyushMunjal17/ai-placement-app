@@ -13,7 +13,8 @@ const Register = () => {
     username: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    role: 'student'
   })
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
@@ -33,9 +34,9 @@ const Register = () => {
   }
 
   const validateForm = () => {
-    const { firstName, lastName, username, email, password, confirmPassword } = formData
+    const { firstName, lastName, username, email, password, confirmPassword, role } = formData
 
-    if (!firstName || !lastName || !username || !email || !password || !confirmPassword) {
+    if (!firstName || !lastName || !username || !email || !password || !confirmPassword || !role) {
       return 'Please fill in all fields'
     }
 
@@ -185,6 +186,28 @@ const Register = () => {
                 onChange={handleChange}
                 disabled={loading}
               />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="role" className="text-sm font-medium">
+                Register as
+              </label>
+              <select
+                id="role"
+                name="role"
+                value={formData.role}
+                onChange={handleChange}
+                disabled={loading}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="student">Student</option>
+                <option value="admin">Admin</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                {formData.role === 'admin' 
+                  ? 'Admins can create and manage problems' 
+                  : 'Students can solve problems and track progress'}
+              </p>
             </div>
 
             <div className="space-y-2">

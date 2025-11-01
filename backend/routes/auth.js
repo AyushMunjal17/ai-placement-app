@@ -9,13 +9,21 @@ const router = express.Router();
 // @access  Public
 router.post('/register', async (req, res) => {
   try {
-    const { username, email, password, firstName, lastName } = req.body;
+    const { username, email, password, firstName, lastName, role } = req.body;
 
     // Validation
-    if (!username || !email || !password || !firstName || !lastName) {
+    if (!username || !email || !password || !firstName || !lastName || !role) {
       return res.status(400).json({
         message: 'All fields are required',
         error: 'MISSING_FIELDS'
+      });
+    }
+
+    // Validate role
+    if (!['student', 'admin'].includes(role)) {
+      return res.status(400).json({
+        message: 'Invalid role. Must be either "student" or "admin"',
+        error: 'INVALID_ROLE'
       });
     }
 
@@ -44,7 +52,8 @@ router.post('/register', async (req, res) => {
       email,
       password,
       firstName,
-      lastName
+      lastName,
+      role
     });
 
     await user.save();

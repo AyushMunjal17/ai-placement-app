@@ -12,7 +12,11 @@ import {
   Users, 
   CheckCircle,
   AlertCircle,
-  Loader2
+  Loader2,
+  Building2,
+  Tag,
+  TrendingUp,
+  X
 } from 'lucide-react'
 
 const Problems = () => {
@@ -21,8 +25,12 @@ const Problems = () => {
   const [error, setError] = useState('')
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedDifficulty, setSelectedDifficulty] = useState('')
+  const [selectedCompany, setSelectedCompany] = useState('')
+  const [selectedTag, setSelectedTag] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [totalPages, setTotalPages] = useState(1)
+  const [allCompanies, setAllCompanies] = useState([])
+  const [allTags, setAllTags] = useState([])
 
   const difficulties = ['Easy', 'Medium', 'Hard']
   const difficultyColors = {
@@ -33,7 +41,19 @@ const Problems = () => {
 
   useEffect(() => {
     fetchProblems()
-  }, [currentPage, selectedDifficulty, searchTerm])
+  }, [currentPage, selectedDifficulty, searchTerm, selectedCompany, selectedTag])
+
+  useEffect(() => {
+    // Extract unique companies and tags from problems
+    const companies = new Set()
+    const tags = new Set()
+    problems.forEach(problem => {
+      problem.companyTags?.forEach(c => companies.add(c))
+      problem.tags?.forEach(t => tags.add(t))
+    })
+    setAllCompanies(Array.from(companies).sort())
+    setAllTags(Array.from(tags).sort())
+  }, [problems])
 
   const fetchProblems = async () => {
     try {
@@ -45,6 +65,8 @@ const Problems = () => {
 
       if (selectedDifficulty) params.append('difficulty', selectedDifficulty)
       if (searchTerm) params.append('search', searchTerm)
+      if (selectedCompany) params.append('company', selectedCompany)
+      if (selectedTag) params.append('tag', selectedTag)
 
       const response = await axios.get(`/problems?${params}`)
       setProblems(response.data.problems)
@@ -108,24 +130,26 @@ const Problems = () => {
 
       {/* Search and Filters */}
       <Card>
-        <CardContent className="pt-6">
-          <div className="flex flex-col md:flex-row gap-4">
-            {/* Search */}
-            <form onSubmit={handleSearch} className="flex-1">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search problems by title or description..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </form>
+        <CardContent className="pt-6 space-y-4">
+          {/* Search Bar */}
+          <form onSubmit={handleSearch} className="flex-1">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Search problems by title or description..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+          </form>
 
+          {/* Filters Row */}
+          <div className="flex flex-wrap gap-3">
             {/* Difficulty Filter */}
             <div className="flex items-center gap-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Difficulty:</span>
               <div className="flex gap-2">
                 {difficulties.map((difficulty) => (
                   <Button
@@ -140,7 +164,93 @@ const Problems = () => {
                 ))}
               </div>
             </div>
+
+            {/* Company Filter */}
+            <div className="flex items-center gap-2">
+              <Building2 className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Company:</span>
+              <select
+                value={selectedCompany}
+                onChange={(e) => {
+                  setSelectedCompany(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="px-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Companies</option>
+                {allCompanies.map((company) => (
+                  <option key={company} value={company}>
+                    {company}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Tag Filter */}
+            <div className="flex items-center gap-2">
+              <Tag className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm font-medium">Topic:</span>
+              <select
+                value={selectedTag}
+                onChange={(e) => {
+                  setSelectedTag(e.target.value)
+                  setCurrentPage(1)
+                }}
+                className="px-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="">All Topics</option>
+                {allTags.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
+
+          {/* Active Filters */}
+          {(selectedDifficulty || selectedCompany || selectedTag) && (
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-sm text-muted-foreground">Active filters:</span>
+              {selectedDifficulty && (
+                <span className="px-2 py-1 text-xs bg-blue-100 text-blue-700 rounded flex items-center gap-1">
+                  {selectedDifficulty}
+                  <X 
+                    className="h-3 w-3 cursor-pointer" 
+                    onClick={() => setSelectedDifficulty('')}
+                  />
+                </span>
+              )}
+              {selectedCompany && (
+                <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded flex items-center gap-1">
+                  {selectedCompany}
+                  <X 
+                    className="h-3 w-3 cursor-pointer" 
+                    onClick={() => setSelectedCompany('')}
+                  />
+                </span>
+              )}
+              {selectedTag && (
+                <span className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded flex items-center gap-1">
+                  {selectedTag}
+                  <X 
+                    className="h-3 w-3 cursor-pointer" 
+                    onClick={() => setSelectedTag('')}
+                  />
+                </span>
+              )}
+              <button
+                onClick={() => {
+                  setSelectedDifficulty('')
+                  setSelectedCompany('')
+                  setSelectedTag('')
+                }}
+                className="text-xs text-blue-600 hover:text-blue-700 underline"
+              >
+                Clear all
+              </button>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -152,14 +262,14 @@ const Problems = () => {
         </div>
       )}
 
-      {/* Problems Grid */}
+      {/* Problems List */}
       {problems.length === 0 && !loading ? (
         <Card>
           <CardContent className="pt-6 text-center">
             <Code className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <h3 className="text-lg font-semibold mb-2">No problems found</h3>
             <p className="text-muted-foreground mb-4">
-              {searchTerm || selectedDifficulty 
+              {searchTerm || selectedDifficulty || selectedCompany || selectedTag
                 ? 'Try adjusting your search or filters'
                 : 'Be the first to create a problem!'
               }
@@ -170,97 +280,116 @@ const Problems = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {problems.map((problem) => (
-            <Card key={problem._id} className="hover:shadow-md transition-shadow">
-              <CardHeader>
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <CardTitle className="text-lg line-clamp-2">
+        <Card>
+          <CardContent className="p-0">
+            {/* Table Header */}
+            <div className="grid grid-cols-12 gap-4 p-4 bg-muted/50 border-b font-medium text-sm">
+              <div className="col-span-1 text-center">#</div>
+              <div className="col-span-5">Problem Title</div>
+              <div className="col-span-2">Companies</div>
+              <div className="col-span-2">Topics</div>
+              <div className="col-span-1 text-center">Difficulty</div>
+              <div className="col-span-1 text-center">Action</div>
+            </div>
+
+            {/* Table Body */}
+            <div className="divide-y">
+              {problems.map((problem, index) => (
+                <div 
+                  key={problem._id} 
+                  className="grid grid-cols-12 gap-4 p-4 hover:bg-muted/30 transition-colors items-center"
+                >
+                  {/* Index */}
+                  <div className="col-span-1 text-center text-muted-foreground font-medium">
+                    {(currentPage - 1) * 12 + index + 1}
+                  </div>
+
+                  {/* Title */}
+                  <div className="col-span-5">
+                    <Link 
+                      to={`/problems/${problem._id}`}
+                      className="font-medium hover:text-blue-600 transition-colors"
+                    >
                       {problem.title}
-                    </CardTitle>
-                    <CardDescription className="mt-2 line-clamp-3">
-                      {problem.description}
-                    </CardDescription>
-                  </div>
-                  <div className={`px-2 py-1 rounded-full text-xs font-medium border ${difficultyColors[problem.difficulty]}`}>
-                    {problem.difficulty}
-                  </div>
-                </div>
-              </CardHeader>
-
-              <CardContent className="space-y-4">
-                {/* Stats */}
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <div className="flex items-center gap-1">
-                    <Users className="h-4 w-4" />
-                    <span>{problem.totalSubmissions || 0} submissions</span>
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <CheckCircle className="h-4 w-4" />
-                    <span>{problem.acceptanceRate || 0}% accepted</span>
-                  </div>
-                </div>
-
-                {/* Tags */}
-                {problem.tags && problem.tags.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap gap-1">
-                      {problem.tags.slice(0, 3).map((tag, index) => (
-                        <span
-                          key={index}
-                          className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded border border-blue-200"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                      {problem.tags.length > 3 && (
-                        <span className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded">
-                          +{problem.tags.length - 3} more
-                        </span>
-                      )}
+                    </Link>
+                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <Users className="h-3 w-3" />
+                        {problem.totalSubmissions || 0}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <TrendingUp className="h-3 w-3" />
+                        {problem.acceptanceRate || 0}%
+                      </span>
                     </div>
                   </div>
-                )}
 
-                {/* Company Tags */}
-                {problem.companyTags && problem.companyTags.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
-                    {problem.companyTags.slice(0, 3).map((company, index) => (
-                      <span
-                        key={index}
-                        className="px-2 py-1 bg-green-50 text-green-600 text-xs rounded border border-green-200 font-medium"
-                      >
-                        {company}
-                      </span>
-                    ))}
-                    {problem.companyTags.length > 3 && (
-                      <span className="px-2 py-1 bg-muted text-muted-foreground text-xs rounded">
-                        +{problem.companyTags.length - 3} more
-                      </span>
+                  {/* Companies */}
+                  <div className="col-span-2">
+                    {problem.companyTags && problem.companyTags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {problem.companyTags.slice(0, 2).map((company, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium"
+                          >
+                            {company}
+                          </span>
+                        ))}
+                        {problem.companyTags.length > 2 && (
+                          <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded">
+                            +{problem.companyTags.length - 2}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </div>
-                )}
 
-                {/* Publisher and Date */}
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>By {problem.publisherName}</span>
-                  <div className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
-                    <span>{formatDate(problem.createdAt)}</span>
+                  {/* Topics */}
+                  <div className="col-span-2">
+                    {problem.tags && problem.tags.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {problem.tags.slice(0, 2).map((tag, idx) => (
+                          <span
+                            key={idx}
+                            className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                        {problem.tags.length > 2 && (
+                          <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded">
+                            +{problem.tags.length - 2}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">-</span>
+                    )}
+                  </div>
+
+                  {/* Difficulty */}
+                  <div className="col-span-1 flex justify-center">
+                    <span className={`px-2 py-1 rounded text-xs font-medium border ${difficultyColors[problem.difficulty]}`}>
+                      {problem.difficulty}
+                    </span>
+                  </div>
+
+                  {/* Action */}
+                  <div className="col-span-1 flex justify-center">
+                    <Link to={`/problems/${problem._id}`}>
+                      <Button size="sm" variant="outline">
+                        Solve
+                      </Button>
+                    </Link>
                   </div>
                 </div>
-
-                {/* Action Button */}
-                <Link to={`/problems/${problem._id}`}>
-                  <Button className="w-full">
-                    Solve Problem
-                  </Button>
-                </Link>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* Pagination */}

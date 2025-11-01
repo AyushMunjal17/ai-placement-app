@@ -1,0 +1,386 @@
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import axios from 'axios'
+import { useAuth } from '../contexts/AuthContext'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
+import { Button } from '../components/ui/button'
+import { 
+  Users, 
+  FileText, 
+  CheckCircle, 
+  TrendingUp, 
+  Shield,
+  Trash2,
+  Eye,
+  EyeOff,
+  Plus,
+  BarChart3
+} from 'lucide-react'
+
+const AdminDashboard = () => {
+  const { user } = useAuth()
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(true)
+  const [activeTab, setActiveTab] = useState('overview')
+  const [dashboardData, setDashboardData] = useState({
+    problems: [],
+    admins: [],
+    statistics: {}
+  })
+
+  useEffect(() => {
+    // Redirect if not admin
+    if (user && user.role !== 'admin') {
+      navigate('/problems')
+      return
+    }
+    
+    fetchDashboardData()
+  }, [user, navigate])
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true)
+      const response = await axios.get('/admin/dashboard')
+      setDashboardData(response.data)
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const toggleProblemStatus = async (problemId) => {
+    try {
+      await axios.put(`/admin/problems/${problemId}/toggle-status`)
+      fetchDashboardData()
+    } catch (error) {
+      console.error('Failed to toggle problem status:', error)
+    }
+  }
+
+  const deleteProblem = async (problemId) => {
+    if (!window.confirm('Are you sure you want to delete this problem?')) {
+      return
+    }
+
+    try {
+      await axios.delete(`/admin/problems/${problemId}`)
+      fetchDashboardData()
+    } catch (error) {
+      console.error('Failed to delete problem:', error)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  const { problems, admins, statistics } = dashboardData
+
+  return (
+    <div className="max-w-7xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold flex items-center gap-2">
+            <Shield className="h-8 w-8 text-blue-600" />
+            Admin Dashboard
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Manage problems, view analytics, and monitor platform activity
+          </p>
+        </div>
+        <Button onClick={() => navigate('/create-problem')}>
+          <Plus className="h-4 w-4 mr-2" />
+          Create Problem
+        </Button>
+      </div>
+
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Problems
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{statistics.totalProblems || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              <FileText className="h-3 w-3 inline mr-1" />
+              All problems
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Active Problems
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">{statistics.activeProblems || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              <CheckCircle className="h-3 w-3 inline mr-1" />
+              Published & Active
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Students
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{statistics.totalStudents || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              <Users className="h-3 w-3 inline mr-1" />
+              Registered users
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Admins
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{statistics.totalAdmins || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              <Shield className="h-3 w-3 inline mr-1" />
+              Admin users
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">
+              Total Submissions
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{statistics.totalSubmissions || 0}</div>
+            <p className="text-xs text-muted-foreground mt-1">
+              <TrendingUp className="h-3 w-3 inline mr-1" />
+              All time
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex gap-2 border-b">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'overview'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <BarChart3 className="h-4 w-4 inline mr-2" />
+          Overview
+        </button>
+        <button
+          onClick={() => setActiveTab('problems')}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'problems'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <FileText className="h-4 w-4 inline mr-2" />
+          Problems ({problems.length})
+        </button>
+        <button
+          onClick={() => setActiveTab('admins')}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'admins'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Users className="h-4 w-4 inline mr-2" />
+          Admins ({admins.length})
+        </button>
+      </div>
+
+      {/* Tab Content */}
+      <div className="mt-6">
+        {activeTab === 'overview' && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Recent Problems */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Problems</CardTitle>
+                <CardDescription>Latest problems created by admins</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {problems.slice(0, 5).map((problem) => (
+                    <div key={problem._id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div className="flex-1">
+                        <h4 className="font-medium">{problem.title}</h4>
+                        <p className="text-sm text-muted-foreground">
+                          By {problem.publishedBy?.username || 'Unknown'}
+                        </p>
+                      </div>
+                      <span className={`px-2 py-1 text-xs rounded ${
+                        problem.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                        problem.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {problem.difficulty}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Admin List Preview */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Admin Users</CardTitle>
+                <CardDescription>Platform administrators</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {admins.slice(0, 5).map((admin) => (
+                    <div key={admin._id} className="flex items-center justify-between p-3 border rounded-lg">
+                      <div>
+                        <h4 className="font-medium">{admin.firstName} {admin.lastName}</h4>
+                        <p className="text-sm text-muted-foreground">@{admin.username}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm font-medium">{admin.problemsPublished || 0}</p>
+                        <p className="text-xs text-muted-foreground">Problems</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {activeTab === 'problems' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>All Problems</CardTitle>
+              <CardDescription>Manage all problems on the platform</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {problems.map((problem) => (
+                  <div key={problem._id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3">
+                        <h4 className="font-medium">{problem.title}</h4>
+                        <span className={`px-2 py-1 text-xs rounded ${
+                          problem.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
+                          problem.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
+                          'bg-red-100 text-red-700'
+                        }`}>
+                          {problem.difficulty}
+                        </span>
+                        {problem.isActive ? (
+                          <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded flex items-center gap-1">
+                            <Eye className="h-3 w-3" />
+                            Active
+                          </span>
+                        ) : (
+                          <span className="px-2 py-1 text-xs bg-gray-100 text-gray-700 rounded flex items-center gap-1">
+                            <EyeOff className="h-3 w-3" />
+                            Inactive
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        By {problem.publishedBy?.username || 'Unknown'} • {new Date(problem.createdAt).toLocaleDateString()}
+                      </p>
+                      {problem.tags && problem.tags.length > 0 && (
+                        <div className="flex gap-2 mt-2">
+                          {problem.tags.slice(0, 3).map((tag, idx) => (
+                            <span key={idx} className="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 rounded">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => toggleProblemStatus(problem._id)}
+                      >
+                        {problem.isActive ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => navigate(`/problems/${problem._id}`)}
+                      >
+                        View
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => deleteProblem(problem._id)}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === 'admins' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Admin Users</CardTitle>
+              <CardDescription>All administrators on the platform</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-3">
+                {admins.map((admin) => (
+                  <div key={admin._id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div className="flex-1">
+                      <h4 className="font-medium">{admin.firstName} {admin.lastName}</h4>
+                      <p className="text-sm text-muted-foreground">@{admin.username} • {admin.email}</p>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Joined {new Date(admin.createdAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold">{admin.problemsPublished || 0}</p>
+                      <p className="text-xs text-muted-foreground">Problems Published</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default AdminDashboard
