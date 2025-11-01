@@ -328,7 +328,7 @@ const Problems = () => {
                   {/* Companies */}
                   <div className="col-span-2">
                     {problem.companyTags && problem.companyTags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1 group">
                         {problem.companyTags.slice(0, 2).map((company, idx) => (
                           <span
                             key={idx}
@@ -338,9 +338,19 @@ const Problems = () => {
                           </span>
                         ))}
                         {problem.companyTags.length > 2 && (
-                          <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded">
-                            +{problem.companyTags.length - 2}
-                          </span>
+                          <>
+                            {problem.companyTags.slice(2).map((company, idx) => (
+                              <span
+                                key={idx + 2}
+                                className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium hidden group-hover:inline-block"
+                              >
+                                {company}
+                              </span>
+                            ))}
+                            <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded cursor-pointer group-hover:hidden">
+                              +{problem.companyTags.length - 2}
+                            </span>
+                          </>
                         )}
                       </div>
                     ) : (
@@ -351,7 +361,7 @@ const Problems = () => {
                   {/* Topics */}
                   <div className="col-span-2">
                     {problem.tags && problem.tags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1 group">
                         {problem.tags.slice(0, 2).map((tag, idx) => (
                           <span
                             key={idx}
@@ -361,9 +371,19 @@ const Problems = () => {
                           </span>
                         ))}
                         {problem.tags.length > 2 && (
-                          <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded">
-                            +{problem.tags.length - 2}
-                          </span>
+                          <>
+                            {problem.tags.slice(2).map((tag, idx) => (
+                              <span
+                                key={idx + 2}
+                                className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded hidden group-hover:inline-block"
+                              >
+                                {tag}
+                              </span>
+                            ))}
+                            <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded cursor-pointer group-hover:hidden">
+                              +{problem.tags.length - 2}
+                            </span>
+                          </>
                         )}
                       </div>
                     ) : (
