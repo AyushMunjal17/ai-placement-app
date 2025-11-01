@@ -1,4 +1,6 @@
+import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
+import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
@@ -15,6 +17,25 @@ import {
 
 const Home = () => {
   const { isAuthenticated, user } = useAuth()
+  const [stats, setStats] = useState({
+    totalProblems: 0,
+    totalUsers: 0,
+    totalSubmissions: 0,
+    averageAcceptance: 0
+  })
+
+  useEffect(() => {
+    fetchStats()
+  }, [])
+
+  const fetchStats = async () => {
+    try {
+      const response = await axios.get('/problems/stats')
+      setStats(response.data)
+    } catch (error) {
+      console.error('Failed to fetch stats:', error)
+    }
+  }
 
   const modules = [
     {
@@ -61,11 +82,11 @@ const Home = () => {
     }
   ]
 
-  const stats = [
-    { label: "Active Problems", value: "50+", icon: Code },
-    { label: "Registered Users", value: "1K+", icon: Users },
-    { label: "Solutions Submitted", value: "5K+", icon: CheckCircle },
-    { label: "Success Rate", value: "85%", icon: Trophy }
+  const statsDisplay = [
+    { label: "Active Problems", value: stats.totalProblems || 0, icon: Code },
+    { label: "Registered Users", value: stats.totalUsers || 0, icon: Users },
+    { label: "Solutions Submitted", value: stats.totalSubmissions || 0, icon: CheckCircle },
+    { label: "Average Acceptance", value: `${stats.averageAcceptance || 0}%`, icon: Trophy }
   ]
 
   return (
@@ -123,7 +144,7 @@ const Home = () => {
 
       {/* Stats Section */}
       <section className="grid grid-cols-2 md:grid-cols-4 gap-6">
-        {stats.map((stat, index) => (
+        {statsDisplay.map((stat, index) => (
           <Card key={index} className="text-center">
             <CardContent className="pt-6">
               <div className="flex flex-col items-center space-y-2">

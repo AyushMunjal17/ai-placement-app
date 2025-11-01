@@ -450,6 +450,30 @@ router.post('/submit', authenticateToken, async (req, res) => {
   }
 });
 
+// @route   GET /api/submissions/my-submissions
+// @desc    Get all submissions for the logged-in user
+// @access  Private
+router.get('/my-submissions', authenticateToken, async (req, res) => {
+  try {
+    const submissions = await Submission.find({
+      userId: req.user._id
+    })
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    res.json({
+      submissions
+    });
+
+  } catch (error) {
+    console.error('Get my submissions error:', error);
+    res.status(500).json({
+      message: 'Failed to fetch submissions',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/submissions/problem/:problemId
 // @desc    Get user's submissions for a specific problem
 // @access  Private

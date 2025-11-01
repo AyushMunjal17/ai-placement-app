@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
+import { Select } from '../components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { AlertCircle, Eye, EyeOff, UserPlus, CheckCircle } from 'lucide-react'
 
@@ -192,17 +193,16 @@ const Register = () => {
               <label htmlFor="role" className="text-sm font-medium">
                 Register as
               </label>
-              <select
+              <Select
                 id="role"
                 name="role"
                 value={formData.role}
                 onChange={handleChange}
                 disabled={loading}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="student">Student</option>
                 <option value="admin">Admin</option>
-              </select>
+              </Select>
               <p className="text-xs text-gray-500 mt-1">
                 {formData.role === 'admin' 
                   ? 'Admins can create and manage problems' 

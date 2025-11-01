@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import axios from 'axios'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
+import { Select } from '../components/ui/select'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { 
   Search, 
@@ -65,8 +66,8 @@ const Problems = () => {
 
       if (selectedDifficulty) params.append('difficulty', selectedDifficulty)
       if (searchTerm) params.append('search', searchTerm)
-      if (selectedCompany) params.append('company', selectedCompany)
-      if (selectedTag) params.append('tag', selectedTag)
+      if (selectedCompany) params.append('companyTags', selectedCompany)
+      if (selectedTag) params.append('tags', selectedTag)
 
       const response = await axios.get(`/problems?${params}`)
       setProblems(response.data.problems)
@@ -169,13 +170,13 @@ const Problems = () => {
             <div className="flex items-center gap-2">
               <Building2 className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Company:</span>
-              <select
+              <Select
                 value={selectedCompany}
                 onChange={(e) => {
                   setSelectedCompany(e.target.value)
                   setCurrentPage(1)
                 }}
-                className="px-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-[200px]"
               >
                 <option value="">All Companies</option>
                 {allCompanies.map((company) => (
@@ -183,20 +184,20 @@ const Problems = () => {
                     {company}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
 
             {/* Tag Filter */}
             <div className="flex items-center gap-2">
               <Tag className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Topic:</span>
-              <select
+              <Select
                 value={selectedTag}
                 onChange={(e) => {
                   setSelectedTag(e.target.value)
                   setCurrentPage(1)
                 }}
-                className="px-3 py-1.5 text-sm border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                className="w-[200px]"
               >
                 <option value="">All Topics</option>
                 {allTags.map((tag) => (
@@ -204,7 +205,7 @@ const Problems = () => {
                     {tag}
                   </option>
                 ))}
-              </select>
+              </Select>
             </div>
           </div>
 

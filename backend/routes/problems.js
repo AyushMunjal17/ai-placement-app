@@ -1,10 +1,39 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const Problem = require('../models/Problem');
+const User = require('../models/User');
+const Submission = require('../models/Submission');
 const { authenticateToken, optionalAuth } = require('../middlewares/auth');
 const { isAdmin } = require('../middlewares/adminAuth');
 
 const router = express.Router();
+
+// @route   GET /api/problems/stats
+// @desc    Get platform statistics
+// @access  Public
+router.get('/stats', async (req, res) => {
+  try {
+    const totalProblems = await Problem.countDocuments({ isPublic: true, isActive: true });
+    const totalUsers = await User.countDocuments();
+    const totalSubmissions = await Submission.countDocuments();
+    
+    // Calculate average acceptance rate
+    const problems = await Problem.find({ isPublic: true, isActive: true });
+    const avgAcceptance = problems.length > 0
+      ? Math.round(problems.reduce((sum, p) => sum + (p.acceptanceRate || 0), 0) / problems.length)
+      : 0;
+
+    res.json({
+      totalProblems,
+      totalUsers,
+      totalSubmissions,
+      averageAcceptance: avgAcceptance
+    });
+  } catch (error) {
+    console.error('Stats error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // @route   GET /api/problems/debug/all
 // @desc    Debug route to see all problems in database
