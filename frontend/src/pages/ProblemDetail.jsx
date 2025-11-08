@@ -117,7 +117,7 @@ const ProblemDetail = () => {
     try {
       const response = await axios.post('/submissions/run', {
         code,
-        language_id: languages[language].id,
+        language_id: language, // Send language name (python, javascript, etc.)
         problemId: id
       })
 
@@ -152,7 +152,7 @@ const ProblemDetail = () => {
       const response = await axios.post('/submissions/submit', {
         problemId: id,
         code,
-        language_id: languages[language].id
+        language_id: language // Send language name (python, javascript, etc.)
       })
 
       // Handle new format with detailed test results

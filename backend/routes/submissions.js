@@ -6,48 +6,40 @@ const { authenticateToken } = require('../middlewares/auth');
 
 const router = express.Router();
 
-// Language ID mapping for Judge0
-const LANGUAGE_IDS = {
-  'c': 50,        // C (GCC 9.2.0)
-  'cpp': 54,      // C++ (GCC 9.2.0)
-  'java': 62,     // Java (OpenJDK 13.0.1)
-  'python': 71,   // Python (3.8.1)
-  'javascript': 63 // JavaScript (Node.js 12.14.0)
+// Language mapping for Piston API
+const LANGUAGE_MAP = {
+  'c': 'c',
+  'cpp': 'c++',
+  'java': 'java',
+  'python': 'python',
+  'javascript': 'javascript'
 };
 
-// Judge0 API configuration
-const JUDGE0_API_URL = process.env.JUDGE0_API_URL || 'https://judge0-ce.p.rapidapi.com';
-const JUDGE0_API_KEY = process.env.JUDGE0_API_KEY;
+// Piston API configuration
+const PISTON_API_URL = 'https://emkc.org/api/v2/piston';
 
-// Debug logging
-console.log('🔑 Judge0 API URL:', JUDGE0_API_URL);
-console.log('🔑 Judge0 API Key:', JUDGE0_API_KEY ? 'Loaded ✅' : 'Missing ❌');
-console.log('🔑 API Key length:', JUDGE0_API_KEY ? JUDGE0_API_KEY.length : 0);
+console.log('🚀 Using Piston API:', PISTON_API_URL);
 
-// @route   GET /api/submissions/test-judge0-simple
-// @desc    Test Judge0 API with minimal code
+// @route   GET /api/submissions/test-piston
+// @desc    Test Piston API
 // @access  Public (for debugging)
-router.get('/test-judge0-simple', async (req, res) => {
+router.get('/test-piston', async (req, res) => {
   try {
-    // Test with the absolute simplest code
-    const response = await axios.post(`${JUDGE0_API_URL}/submissions`, {
-      source_code: Buffer.from('print("test")').toString('base64'),
-      language_id: 71
-    }, {
-      headers: {
-        'Content-Type': 'application/json',
-        'X-RapidAPI-Key': JUDGE0_API_KEY,
-        'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
-      }
+    const response = await axios.post(`${PISTON_API_URL}/execute`, {
+      language: 'python',
+      version: '3.10.0',
+      files: [{
+        content: 'print("Hello from Piston!")'
+      }]
     });
 
     res.json({
-      message: 'Simple Judge0 test',
-      token: response.data.token,
-      status: 'Submission created successfully'
+      message: 'Piston API test successful',
+      output: response.data.run.output,
+      status: 'Working ✅'
     });
   } catch (error) {
-    console.error('Simple Judge0 test error:', error.response?.data || error.message);
+    console.error('Piston test error:', error.response?.data || error.message);
     res.status(500).json({
       message: 'Simple Judge0 test failed',
       error: error.response?.data || error.message
@@ -111,72 +103,56 @@ router.get('/test-judge0', authenticateToken, async (req, res) => {
   }
 });
 
-// Helper function to execute code using Judge0
+// Helper function to execute code using Piston API
 const executeCode = async (code, languageId, stdin = '') => {
   try {
-    console.log('🚀 Executing code with Judge0...');
+    console.log('🚀 Executing code with Piston API...');
     console.log('📝 Code length:', code.length);
-    console.log('🔢 Language ID:', languageId);
+    console.log('🔢 Language:', languageId);
     console.log('📥 Input length:', stdin.length);
-    console.log('🔑 API Key available:', !!JUDGE0_API_KEY);
 
-    if (!JUDGE0_API_KEY) {
-      throw new Error('Judge0 API key is not configured');
-    }
+    // Map language ID to Piston language name
+    const language = LANGUAGE_MAP[languageId] || languageId;
 
-    // Create submission
-    const submissionResponse = await axios.post(
-      `${JUDGE0_API_URL}/submissions?wait=true&base64_encoded=true&fields=*`, 
-      {
-        source_code: Buffer.from(code).toString('base64'),
-        language_id: languageId,
-        stdin: stdin ? Buffer.from(stdin).toString('base64') : '',
-        cpu_time_limit: 2,
-        memory_limit: 128000
-      }, 
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'X-RapidAPI-Key': JUDGE0_API_KEY,
-          'X-RapidAPI-Host': 'judge0-ce.p.rapidapi.com'
-        }
-      }
-    );
+    // Execute code with Piston
+    const response = await axios.post(`${PISTON_API_URL}/execute`, {
+      language: language,
+      version: '*', // Use latest version
+      files: [{
+        content: code
+      }],
+      stdin: stdin || '',
+      compile_timeout: 10000,
+      run_timeout: 3000,
+      compile_memory_limit: -1,
+      run_memory_limit: -1
+    });
 
-    console.log('✅ Submission created, token:', submissionResponse.data.token);
-    const result = submissionResponse.data;
+    console.log('✅ Execution completed');
+    const result = response.data;
 
-    // Decode the response
-    const decodeIfNeeded = (str) => {
-      if (!str) return '';
-      try {
-        // Try to decode as base64 first
-        return Buffer.from(str, 'base64').toString('utf-8');
-      } catch (e) {
-        // If it's not base64, return as is
-        return str;
-      }
+    // Map Piston response to our format
+    const mappedResult = {
+      stdout: result.run?.output || '',
+      stderr: result.run?.stderr || result.compile?.stderr || '',
+      compile_output: result.compile?.output || '',
+      status: {
+        id: result.run?.code === 0 ? 3 : 4, // 3 = Accepted, 4 = Wrong Answer
+        description: result.run?.code === 0 ? 'Accepted' : (result.run?.signal || 'Runtime Error')
+      },
+      time: null, // Piston doesn't provide execution time
+      memory: null // Piston doesn't provide memory usage
     };
 
-    const decodedResult = {
-      stdout: decodeIfNeeded(result.stdout),
-      stderr: decodeIfNeeded(result.stderr),
-      compile_output: decodeIfNeeded(result.compile_output),
-      status: result.status,
-      time: result.time,
-      memory: result.memory
-    };
+    console.log('🔍 Execution result:');
+    console.log('📤 stdout:', mappedResult.stdout);
+    console.log('❌ stderr:', mappedResult.stderr);
+    console.log('🔧 compile_output:', mappedResult.compile_output);
+    console.log('📊 status:', mappedResult.status);
 
-    console.log('🔍 Execution result details:');
-    console.log('📤 Raw stdout:', result.stdout);  // Log raw value for debugging
-    console.log('📤 Decoded stdout:', decodedResult.stdout);
-    console.log('❌ stderr:', decodedResult.stderr);
-    console.log('🔧 compile_output:', decodedResult.compile_output);
-    console.log('📊 status:', decodedResult.status);
-
-    return decodedResult;
+    return mappedResult;
   } catch (error) {
-    console.error('❌ Judge0 execution error:', error.response?.data || error.message);
+    console.error('❌ Piston execution error:', error.response?.data || error.message);
     throw new Error('Code execution failed: ' + (error.response?.data?.message || error.message));
   }
 };
@@ -403,7 +379,7 @@ router.post('/submit', authenticateToken, async (req, res) => {
       problemId,
       problemTitle: problem.title,
       code,
-      language: Object.keys(LANGUAGE_IDS).find(key => LANGUAGE_IDS[key] === language_id) || 'unknown',
+      language: language_id, // Use language name directly (python, javascript, etc.)
       status: passedCount === allTestCases.length ? 'Accepted' : 'Wrong Answer',
       passedTestCases: passedCount,
       totalTestCases: allTestCases.length,
