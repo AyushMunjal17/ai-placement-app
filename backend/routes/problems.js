@@ -16,11 +16,11 @@ router.get('/stats', async (req, res) => {
     const totalProblems = await Problem.countDocuments({ isPublic: true, isActive: true });
     const totalUsers = await User.countDocuments();
     const totalSubmissions = await Submission.countDocuments();
+    const acceptedSubmissions = await Submission.countDocuments({ status: 'Accepted' });
     
-    // Calculate average acceptance rate
-    const problems = await Problem.find({ isPublic: true, isActive: true });
-    const avgAcceptance = problems.length > 0
-      ? Math.round(problems.reduce((sum, p) => sum + (p.acceptanceRate || 0), 0) / problems.length)
+    // Calculate overall acceptance rate
+    const avgAcceptance = totalSubmissions > 0
+      ? Math.round((acceptedSubmissions / totalSubmissions) * 100)
       : 0;
 
     res.json({
@@ -133,9 +133,30 @@ router.get('/', optionalAuth, async (req, res) => {
     
     console.log('📊 Results:', { totalProblems, problemsFound: problems.length });
 
+    // Calculate acceptance rate and submission stats for each problem
+    const Submission = require('../models/Submission');
+    const problemsWithStats = await Promise.all(problems.map(async (problem) => {
+      const totalSubmissions = await Submission.countDocuments({ problemId: problem._id });
+      const acceptedSubmissions = await Submission.countDocuments({ 
+        problemId: problem._id, 
+        status: 'Accepted' 
+      });
+      
+      const acceptanceRate = totalSubmissions > 0 
+        ? Math.round((acceptedSubmissions / totalSubmissions) * 100) 
+        : 0;
+
+      return {
+        ...problem.getPublicData(),
+        totalSubmissions,
+        acceptedSubmissions,
+        acceptanceRate
+      };
+    }));
+
     res.json({
       message: 'Problems retrieved successfully',
-      problems: problems.map(problem => problem.getPublicData()),
+      problems: problemsWithStats,
       pagination: {
         currentPage: parseInt(page),
         totalPages,
@@ -178,8 +199,24 @@ router.get('/:id', optionalAuth, async (req, res) => {
       });
     }
 
+    // Calculate acceptance rate and submission stats
+    const totalSubmissions = await Submission.countDocuments({ problemId: problem._id });
+    const acceptedSubmissions = await Submission.countDocuments({ 
+      problemId: problem._id, 
+      status: 'Accepted' 
+    });
+    
+    const acceptanceRate = totalSubmissions > 0 
+      ? Math.round((acceptedSubmissions / totalSubmissions) * 100) 
+      : 0;
+
     // Return problem without hidden test cases for public access
-    const problemData = problem.getPublicData();
+    const problemData = {
+      ...problem.getPublicData(),
+      totalSubmissions,
+      acceptedSubmissions,
+      acceptanceRate
+    };
 
     res.json({
       message: 'Problem retrieved successfully',

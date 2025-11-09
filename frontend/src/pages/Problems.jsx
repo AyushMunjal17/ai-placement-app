@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
@@ -21,6 +21,7 @@ import {
 } from 'lucide-react'
 
 const Problems = () => {
+  const navigate = useNavigate()
   const [problems, setProblems] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -284,13 +285,13 @@ const Problems = () => {
         <Card>
           <CardContent className="p-0">
             {/* Table Header */}
-            <div className="grid grid-cols-12 gap-4 p-4 bg-muted/50 border-b font-medium text-sm">
+            <div className="grid grid-cols-12 gap-3 p-4 bg-muted/50 border-b font-medium text-sm">
               <div className="col-span-1 text-center">#</div>
-              <div className="col-span-5">Problem Title</div>
+              <div className="col-span-4">Problem Title</div>
+              <div className="col-span-2">Acceptance</div>
               <div className="col-span-2">Companies</div>
               <div className="col-span-2">Topics</div>
               <div className="col-span-1 text-center">Difficulty</div>
-              <div className="col-span-1 text-center">Action</div>
             </div>
 
             {/* Table Body */}
@@ -298,7 +299,8 @@ const Problems = () => {
               {problems.map((problem, index) => (
                 <div 
                   key={problem._id} 
-                  className="grid grid-cols-12 gap-4 p-4 hover:bg-muted/30 transition-colors items-center"
+                  className="grid grid-cols-12 gap-3 p-4 hover:bg-muted/30 transition-colors items-center cursor-pointer"
+                  onClick={() => navigate(`/problems/${problem._id}`)}
                 >
                   {/* Index */}
                   <div className="col-span-1 text-center text-muted-foreground font-medium">
@@ -306,22 +308,27 @@ const Problems = () => {
                   </div>
 
                   {/* Title */}
-                  <div className="col-span-5">
-                    <Link 
-                      to={`/problems/${problem._id}`}
-                      className="font-medium hover:text-blue-600 transition-colors"
-                    >
+                  <div className="col-span-4">
+                    <div className="font-medium hover:text-blue-600 transition-colors">
                       {problem.title}
-                    </Link>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <Users className="h-3 w-3" />
-                        {problem.totalSubmissions || 0}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <TrendingUp className="h-3 w-3" />
+                    </div>
+                  </div>
+
+                  {/* Acceptance Rate */}
+                  <div className="col-span-2">
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-gray-200 rounded-full h-2">
+                        <div 
+                          className="bg-green-500 h-2 rounded-full transition-all"
+                          style={{ width: `${Math.min(problem.acceptanceRate || 0, 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-sm font-medium text-muted-foreground min-w-[45px]">
                         {problem.acceptanceRate || 0}%
                       </span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {problem.totalSubmissions || 0} submissions
                     </div>
                   </div>
 
@@ -396,15 +403,6 @@ const Problems = () => {
                     <span className={`px-2 py-1 rounded text-xs font-medium border ${difficultyColors[problem.difficulty]}`}>
                       {problem.difficulty}
                     </span>
-                  </div>
-
-                  {/* Action */}
-                  <div className="col-span-1 flex justify-center">
-                    <Link to={`/problems/${problem._id}`}>
-                      <Button size="sm" variant="outline">
-                        Solve
-                      </Button>
-                    </Link>
                   </div>
                 </div>
               ))}
