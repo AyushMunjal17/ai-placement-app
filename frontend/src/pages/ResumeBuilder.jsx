@@ -1,9 +1,127 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import axios from 'axios'
 import { Button } from '../components/ui/button'
 import { Input } from '../components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { FileText, Download, Sparkles, Plus, Trash2, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
+
+const TEMPLATE_CATEGORIES = [
+  { id: 'all', label: 'All Templates' },
+  { id: 'popular', label: 'Popular' },
+  { id: 'professional', label: 'Professional' },
+  { id: 'creative', label: 'Creative' },
+  { id: 'specialized', label: 'Specialized' },
+  { id: 'basic', label: 'Basic' }
+]
+
+const RESUME_TEMPLATES = [
+  {
+    id: 'professional',
+    name: 'Professional',
+    summary: 'Polished business format with structured sections',
+    icon: '💼',
+    badge: 'Popular',
+    categories: ['professional', 'popular']
+  },
+  {
+    id: 'creative',
+    name: 'Creative',
+    summary: 'Bold and artistic design to showcase your creativity',
+    icon: '🎨',
+    categories: ['creative']
+  },
+  {
+    id: 'executive',
+    name: 'Executive',
+    summary: 'Premium design for senior-level positions and leadership roles',
+    icon: '👔',
+    categories: ['professional', 'specialized']
+  },
+  {
+    id: 'technical',
+    name: 'Technical',
+    summary: 'Detail-oriented structure for engineers and developers',
+    icon: '💻',
+    categories: ['professional', 'specialized']
+  },
+  {
+    id: 'academic',
+    name: 'Academic',
+    summary: 'Research-focused layout with publications and teaching',
+    icon: '🎓',
+    categories: ['specialized']
+  },
+  {
+    id: 'simple',
+    name: 'Simple',
+    summary: 'Clean single-column format for quick scanning',
+    icon: '📝',
+    categories: ['basic']
+  },
+  {
+    id: 'modern',
+    name: 'Modern',
+    summary: 'Minimalist design with bold typography accents',
+    icon: '✨',
+    categories: ['popular', 'creative']
+  },
+  {
+    id: 'product',
+    name: 'Product Manager',
+    summary: 'Balanced sections for shipping, metrics, and leadership',
+    icon: '📦',
+    categories: ['specialized']
+  },
+  {
+    id: 'consulting',
+    name: 'Consulting',
+    summary: 'Case-structured layout optimized for top firms',
+    icon: '📊',
+    categories: ['professional', 'specialized']
+  },
+  {
+    id: 'graduate',
+    name: 'Graduate',
+    summary: 'Campus-friendly design highlighting projects and coursework',
+    icon: '🎒',
+    categories: ['basic', 'popular']
+  },
+  {
+    id: 'designer',
+    name: 'Designer',
+    summary: 'Aesthetic-forward layout with visual sections',
+    icon: '✏️',
+    categories: ['creative']
+  },
+  {
+    id: 'ats',
+    name: 'ATS Optimized',
+    summary: 'Highly scannable two-column grid built for applicant systems',
+    icon: '⚙️',
+    categories: ['professional', 'basic']
+  },
+  {
+    id: 'finance',
+    name: 'Finance',
+    summary: 'Metrics-heavy structure tailored for finance roles',
+    icon: '💹',
+    categories: ['specialized']
+  },
+  {
+    id: 'marketing',
+    name: 'Marketing',
+    summary: 'Story-driven template highlighting campaigns and impact',
+    icon: '📣',
+    categories: ['creative', 'popular']
+  },
+  {
+    id: 'internship',
+    name: 'Internship',
+    summary: 'Beginner-friendly format emphasizing skills and projects',
+    icon: '🌱',
+    categories: ['basic']
+  }
+]
 
 const ResumeBuilder = () => {
   const [loading, setLoading] = useState(false)
@@ -11,6 +129,8 @@ const ResumeBuilder = () => {
   const [message, setMessage] = useState({ type: '', text: '' })
   const [resumeId, setResumeId] = useState(null)
   const [activeSection, setActiveSection] = useState('personal')
+  const [isTemplateModalOpen, setTemplateModalOpen] = useState(false)
+  const [templateFilter, setTemplateFilter] = useState('all')
 
   const [formData, setFormData] = useState({
     personalInfo: { fullName: '', email: '', phone: '', location: '', linkedin: '', github: '', portfolio: '', summary: '' },
@@ -22,6 +142,29 @@ const ResumeBuilder = () => {
     achievements: [''],
     template: 'professional'
   })
+
+  const categoryCounts = useMemo(() => {
+    const counts = RESUME_TEMPLATES.reduce(
+      (acc, template) => {
+        template.categories.forEach(category => {
+          acc[category] = (acc[category] || 0) + 1
+        })
+        return acc
+      },
+      { all: RESUME_TEMPLATES.length }
+    )
+    return counts
+  }, [])
+
+  const filteredTemplates = useMemo(() => {
+    if (templateFilter === 'all') return RESUME_TEMPLATES
+    return RESUME_TEMPLATES.filter(template => template.categories.includes(templateFilter))
+  }, [templateFilter])
+
+  const selectedTemplate = useMemo(
+    () => RESUME_TEMPLATES.find(template => template.id === formData.template) || RESUME_TEMPLATES[0],
+    [formData.template]
+  )
 
   useEffect(() => {
     fetchResume()
@@ -125,20 +268,25 @@ const ResumeBuilder = () => {
       <div className="flex gap-3 mb-6">
         <Button onClick={saveResume} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}Save</Button>
         <Button onClick={downloadPDF} variant="outline"><Download className="h-4 w-4 mr-2" />Download PDF</Button>
+        <Button variant="outline" onClick={() => setTemplateModalOpen(true)}>
+          <Sparkles className="h-4 w-4 mr-2" />Change Template
+        </Button>
       </div>
 
-      {/* Template Selection */}
       <Card className="mb-6">
-        <CardHeader><CardTitle>Choose Template</CardTitle></CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-4 gap-4">
-            {['professional', 'creative', 'technical', 'minimal'].map(t => (
-              <button key={t} onClick={() => setFormData(prev => ({ ...prev, template: t }))}
-                className={`p-4 border-2 rounded-lg capitalize ${formData.template === t ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                {t}
-              </button>
-            ))}
+        <CardHeader>
+          <CardTitle>Selected Template</CardTitle>
+        </CardHeader>
+        <CardContent className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm text-muted-foreground mb-1">You are currently using</p>
+            <h2 className="text-xl font-semibold flex items-center gap-2">
+              <span className="text-2xl" aria-hidden>{selectedTemplate.icon}</span>
+              {selectedTemplate.name}
+            </h2>
+            <p className="text-sm text-muted-foreground mt-1 max-w-xl">{selectedTemplate.summary}</p>
           </div>
+          <Button onClick={() => setTemplateModalOpen(true)}>Browse Templates</Button>
         </CardContent>
       </Card>
 
@@ -337,6 +485,106 @@ const ResumeBuilder = () => {
             ))}
           </CardContent>
         </Card>
+      )}
+
+      {isTemplateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setTemplateModalOpen(false)} />
+          <div className="relative z-10 w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl">
+            <div className="border-b px-6 py-5 flex items-start justify-between">
+              <div>
+                <h2 className="text-2xl font-semibold">Choose Your Resume Template</h2>
+                <p className="text-sm text-muted-foreground mt-1">Select from 15 professionally designed templates</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button variant="ghost" size="sm" asChild>
+                  <a href="mailto:support@example.com" className="flex items-center gap-2">
+                    Need Help?
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setTemplateModalOpen(false)}>Close</Button>
+              </div>
+            </div>
+
+            <div className="border-b px-6 py-4 overflow-x-auto">
+              <div className="flex gap-2 min-w-max">
+                {TEMPLATE_CATEGORIES.map(category => (
+                  <button
+                    key={category.id}
+                    onClick={() => setTemplateFilter(category.id)}
+                    className={`px-4 py-2 rounded-full border text-sm transition ${
+                      templateFilter === category.id
+                        ? 'bg-blue-600 text-white border-blue-600 shadow'
+                        : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
+                    }`}
+                  >
+                    <span>{category.label}</span>
+                    <span className="ml-2 text-xs opacity-80">
+                      {categoryCounts[category.id] || 0}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="px-6 py-6 overflow-y-auto max-h-[60vh]">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredTemplates.map(template => {
+                  const isSelected = formData.template === template.id
+                  return (
+                    <button
+                      key={template.id}
+                      onClick={() => {
+                        setFormData(prev => ({ ...prev, template: template.id }))
+                        setTemplateModalOpen(false)
+                      }}
+                      className={`flex flex-col items-start gap-3 rounded-2xl border p-5 text-left transition ${
+                        isSelected
+                          ? 'border-blue-600 bg-blue-50/70 shadow-lg shadow-blue-100'
+                          : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between w-full">
+                        <span className="text-3xl" aria-hidden>{template.icon}</span>
+                        {template.badge && (
+                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
+                            {template.badge}
+                          </span>
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="text-lg font-semibold">{template.name}</h3>
+                        <p className="text-sm text-muted-foreground mt-1">{template.summary}</p>
+                      </div>
+                      <div className="mt-auto flex flex-wrap gap-2">
+                        {template.categories.map(tag => (
+                          <span key={tag} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600 capitalize">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                      {isSelected && (
+                        <div className="mt-3 inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-medium text-white">
+                          Selected
+                        </div>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between border-t px-6 py-4 bg-slate-50">
+              <p className="text-sm text-muted-foreground">
+                Hover over templates to see more details
+              </p>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" onClick={() => setTemplateModalOpen(false)}>Cancel</Button>
+                <Button onClick={() => setTemplateModalOpen(false)}>Done</Button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
