@@ -9,6 +9,7 @@ import ProblemDetail from './pages/ProblemDetail'
 import CreateProblem from './pages/CreateProblem'
 import Dashboard from './pages/Dashboard'
 import AdminDashboard from './pages/AdminDashboard'
+import ResumeBuilder from './pages/ResumeBuilder'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -45,6 +46,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <AdminDashboard />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/resume-builder" 
+                element={
+                  <ProtectedRoute>
+                    <ResumeBuilder />
                   </ProtectedRoute>
                 } 
               />

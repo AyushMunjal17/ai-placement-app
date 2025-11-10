@@ -89,11 +89,21 @@ const Navbar = () => {
               <span className="text-xs bg-muted px-2 py-1 rounded">Coming Soon</span>
             </div>
             
-            <div className="flex items-center space-x-1 text-sm font-medium text-muted-foreground cursor-not-allowed">
-              <FileText className="h-4 w-4" />
-              <span>Resume Maker</span>
-              <span className="text-xs bg-muted px-2 py-1 rounded">Coming Soon</span>
-            </div>
+            {isAuthenticated ? (
+              <Link 
+                to="/resume-builder" 
+                className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+              >
+                <FileText className="h-4 w-4" />
+                <span>Resume Maker</span>
+              </Link>
+            ) : (
+              <div className="flex items-center space-x-1 text-sm font-medium text-muted-foreground cursor-not-allowed">
+                <FileText className="h-4 w-4" />
+                <span>Resume Maker</span>
+                <span className="text-xs bg-muted px-2 py-1 rounded">Login Required</span>
+              </div>
+            )}
           </div>
 
           {/* User Actions */}
