@@ -62,8 +62,15 @@ export const AuthProvider = ({ children }) => {
       
       return { success: true, user: userData }
     } catch (error) {
-      const message = error.response?.data?.message || 'Login failed'
-      return { success: false, error: message }
+      const errorData = error.response?.data
+      const message = errorData?.message || 'Login failed'
+      const requiresVerification = errorData?.error === 'EMAIL_NOT_VERIFIED'
+      
+      return { 
+        success: false, 
+        error: message,
+        requiresVerification: requiresVerification
+      }
     }
   }
 
@@ -71,13 +78,19 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.post('/auth/register', userData)
       
-      const { token: newToken, user: newUser } = response.data
+      const { token: newToken, user: newUser, requiresApproval, requiresEmailVerification, message } = response.data
       
       setToken(newToken)
       setUser(newUser)
       localStorage.setItem('token', newToken)
       
-      return { success: true, user: newUser }
+      return { 
+        success: true, 
+        user: newUser, 
+        requiresApproval: requiresApproval || false,
+        requiresEmailVerification: requiresEmailVerification || false,
+        message: message || 'Registration successful'
+      }
     } catch (error) {
       const message = error.response?.data?.message || 'Registration failed'
       return { success: false, error: message }

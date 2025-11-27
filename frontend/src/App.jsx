@@ -10,6 +10,8 @@ import CreateProblem from './pages/CreateProblem'
 import Dashboard from './pages/Dashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import ResumeBuilder from './pages/ResumeBuilder'
+import VerifyEmail from './pages/VerifyEmail'
+import ForgotPassword from './pages/ForgotPassword'
 import ProtectedRoute from './components/ProtectedRoute'
 
 function App() {
@@ -23,6 +25,15 @@ function App() {
               <Route path="/" element={<Home />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route 
+                path="/verify-email" 
+                element={
+                  <ProtectedRoute>
+                    <VerifyEmail />
+                  </ProtectedRoute>
+                } 
+              />
               <Route path="/problems" element={<Problems />} />
               <Route path="/problems/:id" element={<ProblemDetail />} />
               <Route 

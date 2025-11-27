@@ -90,7 +90,17 @@ const Register = () => {
       const result = await register(registrationData)
       
       if (result.success) {
-        navigate('/dashboard')
+        if (result.requiresEmailVerification) {
+          // Redirect to email verification page
+          navigate('/verify-email')
+        } else if (result.requiresApproval) {
+          // Show success message with approval notice
+          setError('')
+          alert(result.message || 'Your admin account request has been submitted and is pending approval. You can log in as a student until your request is approved.')
+          navigate('/dashboard')
+        } else {
+          navigate('/dashboard')
+        }
       } else {
         setError(result.error)
       }
@@ -205,7 +215,7 @@ const Register = () => {
               </Select>
               <p className="text-xs text-gray-500 mt-1">
                 {formData.role === 'admin' 
-                  ? 'Admins can create and manage problems' 
+                  ? 'Admin accounts require approval. You will be registered as a student until approved.' 
                   : 'Students can solve problems and track progress'}
               </p>
             </div>

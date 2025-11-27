@@ -16,7 +16,8 @@ const userSchema = new mongoose.Schema({
     unique: true,
     trim: true,
     lowercase: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    match: [/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/, 'Please enter a valid email'],
+    maxlength: [254, 'Email address is too long']
   },
   password: {
     type: String,
@@ -67,6 +68,47 @@ const userSchema = new mongoose.Schema({
   lastLogin: {
     type: Date,
     default: null
+  },
+  // Admin approval system
+  adminApprovalStatus: {
+    type: String,
+    enum: ['none', 'pending', 'approved', 'rejected'],
+    default: 'none'
+  },
+  approvedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    default: null
+  },
+  approvedAt: {
+    type: Date,
+    default: null
+  },
+  requestedAdminRoleAt: {
+    type: Date,
+    default: null
+  },
+  // Email verification system
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+  emailVerificationOTP: {
+    type: String,
+    default: null
+  },
+  emailVerificationOTPExpires: {
+    type: Date,
+    default: null
+  },
+  // Password reset system
+  resetPasswordOTP: {
+    type: String,
+    default: null
+  },
+  resetPasswordOTPExpires: {
+    type: Date,
+    default: null
   }
 }, {
   timestamps: true // Adds createdAt and updatedAt fields
@@ -101,6 +143,7 @@ userSchema.methods.getPublicProfile = function() {
   return {
     id: this._id,
     username: this.username,
+    email: this.email,
     firstName: this.firstName,
     lastName: this.lastName,
     profilePicture: this.profilePicture,
@@ -108,6 +151,8 @@ userSchema.methods.getPublicProfile = function() {
     problemsPublished: this.problemsPublished,
     totalSubmissions: this.totalSubmissions,
     role: this.role,
+    adminApprovalStatus: this.adminApprovalStatus,
+    isEmailVerified: this.isEmailVerified,
     createdAt: this.createdAt
   };
 };

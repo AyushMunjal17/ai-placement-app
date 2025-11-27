@@ -14,7 +14,9 @@ import {
   Eye,
   EyeOff,
   Plus,
-  BarChart3
+  BarChart3,
+  UserCheck,
+  XCircle
 } from 'lucide-react'
 
 const AdminDashboard = () => {
@@ -30,6 +32,24 @@ const AdminDashboard = () => {
   const [students, setStudents] = useState([])
   const [selectedStudent, setSelectedStudent] = useState(null)
   const [loadingStudentDetail, setLoadingStudentDetail] = useState(false)
+  const [pendingApprovals, setPendingApprovals] = useState([])
+  const [loadingApprovals, setLoadingApprovals] = useState(false)
+  
+  // Check if user is main admin (by email only for flexibility)
+  const isMainAdmin = user?.email === 'ayushmunjal17@gmail.com'
+  
+  // Debug: Log user data to check
+  useEffect(() => {
+    if (user) {
+      console.log('Current user data:', {
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        isMainAdmin: isMainAdmin
+      })
+    }
+  }, [user, isMainAdmin])
 
   useEffect(() => {
     // Redirect if not admin
@@ -39,7 +59,10 @@ const AdminDashboard = () => {
     }
     
     fetchDashboardData()
-  }, [user, navigate])
+    if (isMainAdmin) {
+      fetchPendingApprovals()
+    }
+  }, [user, navigate, isMainAdmin])
 
   const fetchDashboardData = async () => {
     try {
@@ -88,6 +111,45 @@ const AdminDashboard = () => {
       fetchDashboardData()
     } catch (error) {
       console.error('Failed to delete problem:', error)
+    }
+  }
+
+  const fetchPendingApprovals = async () => {
+    try {
+      setLoadingApprovals(true)
+      const response = await axios.get('/admin/pending-approvals')
+      setPendingApprovals(response.data.pendingRequests || [])
+    } catch (error) {
+      console.error('Failed to fetch pending approvals:', error)
+    } finally {
+      setLoadingApprovals(false)
+    }
+  }
+
+  const handleApprove = async (userId) => {
+    if (!window.confirm('Are you sure you want to approve this admin request?')) {
+      return
+    }
+
+    try {
+      await axios.post(`/admin/approve/${userId}`)
+      fetchPendingApprovals()
+      fetchDashboardData() // Refresh to show new admin
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to approve request')
+    }
+  }
+
+  const handleReject = async (userId) => {
+    if (!window.confirm('Are you sure you want to reject this admin request?')) {
+      return
+    }
+
+    try {
+      await axios.post(`/admin/reject/${userId}`)
+      fetchPendingApprovals()
+    } catch (error) {
+      alert(error.response?.data?.message || 'Failed to reject request')
     }
   }
 
@@ -244,6 +306,22 @@ const AdminDashboard = () => {
           <Users className="h-4 w-4 inline mr-2" />
           Admins ({admins.length})
         </button>
+        {isMainAdmin && (
+          <button
+            onClick={() => {
+              setActiveTab('approvals')
+              fetchPendingApprovals()
+            }}
+            className={`px-4 py-2 font-medium transition-colors ${
+              activeTab === 'approvals'
+                ? 'text-blue-600 border-b-2 border-blue-600'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            <UserCheck className="h-4 w-4 inline mr-2" />
+            Approvals ({pendingApprovals.length})
+          </button>
+        )}
       </div>
 
       {/* Tab Content */}
@@ -476,6 +554,60 @@ const AdminDashboard = () => {
                   </div>
                 ))}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === 'approvals' && isMainAdmin && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Pending Admin Approvals</CardTitle>
+              <CardDescription>Review and approve or reject admin account requests</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingApprovals ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                </div>
+              ) : pendingApprovals.length === 0 ? (
+                <div className="text-center py-8">
+                  <UserCheck className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <p className="text-muted-foreground">No pending admin approval requests</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {pendingApprovals.map((request) => (
+                    <div key={request._id} className="flex items-center justify-between p-4 border rounded-lg bg-yellow-50">
+                      <div className="flex-1">
+                        <h4 className="font-medium">{request.firstName} {request.lastName}</h4>
+                        <p className="text-sm text-muted-foreground">@{request.username} • {request.email}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Requested on {new Date(request.requestedAdminRoleAt || request.createdAt).toLocaleString()}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleReject(request._id)}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <XCircle className="h-4 w-4 mr-2" />
+                          Reject
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={() => handleApprove(request._id)}
+                          className="bg-green-600 hover:bg-green-700"
+                        >
+                          <CheckCircle className="h-4 w-4 mr-2" />
+                          Approve
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}

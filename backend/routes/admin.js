@@ -3,7 +3,7 @@ const User = require('../models/User');
 const Problem = require('../models/Problem');
 const Submission = require('../models/Submission');
 const { authenticateToken } = require('../middlewares/auth');
-const { isAdmin } = require('../middlewares/adminAuth');
+const { isAdmin, isMainAdmin } = require('../middlewares/adminAuth');
 
 const router = express.Router();
 
@@ -322,6 +322,136 @@ router.get('/students/:id', authenticateToken, isAdmin, async (req, res) => {
     console.error('Admin student detail error:', error);
     res.status(500).json({
       message: 'Failed to fetch student details',
+      error: error.message
+    });
+  }
+});
+
+// @route   GET /api/admin/pending-approvals
+// @desc    Get all pending admin approval requests
+// @access  Private (Main Admin only)
+router.get('/pending-approvals', authenticateToken, isMainAdmin, async (req, res) => {
+  try {
+    const pendingRequests = await User.find({ 
+      adminApprovalStatus: 'pending' 
+    })
+    .select('username email firstName lastName requestedAdminRoleAt createdAt')
+    .sort({ requestedAdminRoleAt: -1 });
+
+    res.json({ 
+      pendingRequests,
+      count: pendingRequests.length 
+    });
+
+  } catch (error) {
+    console.error('Get pending approvals error:', error);
+    res.status(500).json({
+      message: 'Failed to fetch pending approval requests',
+      error: error.message
+    });
+  }
+});
+
+// @route   POST /api/admin/approve/:userId
+// @desc    Approve an admin request
+// @access  Private (Main Admin only)
+router.post('/approve/:userId', authenticateToken, isMainAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const mainAdminId = req.user._id;
+
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        message: 'User not found',
+        error: 'NOT_FOUND'
+      });
+    }
+
+    if (user.adminApprovalStatus !== 'pending') {
+      return res.status(400).json({
+        message: `User's admin request is not pending. Current status: ${user.adminApprovalStatus}`,
+        error: 'INVALID_STATUS'
+      });
+    }
+
+    // Approve the user and change role to admin
+    user.role = 'admin';
+    user.adminApprovalStatus = 'approved';
+    user.approvedBy = mainAdminId;
+    user.approvedAt = new Date();
+    await user.save();
+
+    res.json({
+      message: 'Admin request approved successfully',
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        approvedAt: user.approvedAt
+      }
+    });
+
+  } catch (error) {
+    console.error('Approve admin request error:', error);
+    res.status(500).json({
+      message: 'Failed to approve admin request',
+      error: error.message
+    });
+  }
+});
+
+// @route   POST /api/admin/reject/:userId
+// @desc    Reject an admin request
+// @access  Private (Main Admin only)
+router.post('/reject/:userId', authenticateToken, isMainAdmin, async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const mainAdminId = req.user._id;
+
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        message: 'User not found',
+        error: 'NOT_FOUND'
+      });
+    }
+
+    if (user.adminApprovalStatus !== 'pending') {
+      return res.status(400).json({
+        message: `User's admin request is not pending. Current status: ${user.adminApprovalStatus}`,
+        error: 'INVALID_STATUS'
+      });
+    }
+
+    // Reject the user (keep as student)
+    user.adminApprovalStatus = 'rejected';
+    user.approvedBy = mainAdminId;
+    user.approvedAt = new Date();
+    await user.save();
+
+    res.json({
+      message: 'Admin request rejected successfully',
+      user: {
+        id: user._id,
+        username: user.username,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        adminApprovalStatus: user.adminApprovalStatus
+      }
+    });
+
+  } catch (error) {
+    console.error('Reject admin request error:', error);
+    res.status(500).json({
+      message: 'Failed to reject admin request',
       error: error.message
     });
   }

@@ -28,4 +28,39 @@ const isAdmin = (req, res, next) => {
   }
 };
 
-module.exports = { isAdmin };
+// Middleware to check if user is the main admin (Ayush Munjal)
+const isMainAdmin = (req, res, next) => {
+  try {
+    // Check if user exists (from authenticateToken middleware)
+    if (!req.user) {
+      return res.status(401).json({
+        message: 'Authentication required',
+        error: 'UNAUTHORIZED'
+      });
+    }
+
+    // Check if user is the main admin
+    const isMainAdminUser = 
+      req.user.email === 'ayushmunjal17@gmail.com' &&
+      req.user.firstName === 'Ayush' &&
+      req.user.lastName === 'Munjal';
+
+    if (!isMainAdminUser) {
+      return res.status(403).json({
+        message: 'Access denied. Only the main admin can perform this action.',
+        error: 'FORBIDDEN'
+      });
+    }
+
+    // User is main admin, proceed
+    next();
+  } catch (error) {
+    console.error('Main admin auth error:', error);
+    res.status(500).json({
+      message: 'Server error during authorization',
+      error: error.message
+    });
+  }
+};
+
+module.exports = { isAdmin, isMainAdmin };

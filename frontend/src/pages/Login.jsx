@@ -51,10 +51,20 @@ const Login = () => {
       if (result.success) {
         navigate(from, { replace: true })
       } else {
-        setError(result.error)
+        // Check if email verification is required
+        if (result.requiresVerification) {
+          navigate('/verify-email')
+        } else {
+          setError(result.error)
+        }
       }
     } catch (err) {
-      setError('An unexpected error occurred. Please try again.')
+      const errorResponse = err.response?.data
+      if (errorResponse?.error === 'EMAIL_NOT_VERIFIED') {
+        navigate('/verify-email')
+      } else {
+        setError(errorResponse?.message || 'An unexpected error occurred. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -99,9 +109,17 @@ const Login = () => {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium">
-                Password
-              </label>
+              <div className="flex items-center justify-between">
+                <label htmlFor="password" className="text-sm font-medium">
+                  Password
+                </label>
+                <Link 
+                  to="/forgot-password" 
+                  className="text-sm text-primary hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
               <div className="relative">
                 <Input
                   id="password"

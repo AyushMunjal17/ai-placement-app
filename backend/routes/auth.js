@@ -1,8 +1,16 @@
 const express = require('express');
 const User = require('../models/User');
 const { generateToken, authenticateToken } = require('../middlewares/auth');
+const { sendOTPEmail, sendPasswordResetOTP, generateOTP } = require('../utils/emailService');
 
 const router = express.Router();
+
+// Email validation function
+const isValidEmail = (email) => {
+  // More comprehensive email regex
+  const emailRegex = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/;
+  return emailRegex.test(email) && email.length <= 254;
+};
 
 // @route   POST /api/auth/register
 // @desc    Register a new user
@@ -16,6 +24,14 @@ router.post('/register', async (req, res) => {
       return res.status(400).json({
         message: 'All fields are required',
         error: 'MISSING_FIELDS'
+      });
+    }
+
+    // Validate email format
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        message: 'Please enter a valid email address',
+        error: 'INVALID_EMAIL'
       });
     }
 
@@ -46,6 +62,22 @@ router.post('/register', async (req, res) => {
       });
     }
 
+    // Handle admin registration - requires approval
+    let userRole = role;
+    let adminApprovalStatus = 'none';
+    let requestedAdminRoleAt = null;
+
+    if (role === 'admin') {
+      // New admin requests: register as student, pending approval
+      userRole = 'student';
+      adminApprovalStatus = 'pending';
+      requestedAdminRoleAt = new Date();
+    }
+
+    // Generate OTP for email verification
+    const otp = generateOTP();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
     // Create new user
     const user = new User({
       username,
@@ -53,10 +85,21 @@ router.post('/register', async (req, res) => {
       password,
       firstName,
       lastName,
-      role
+      role: userRole,
+      adminApprovalStatus,
+      requestedAdminRoleAt,
+      emailVerificationOTP: otp,
+      emailVerificationOTPExpires: otpExpires
     });
 
     await user.save();
+
+    // Send OTP email
+    const emailResult = await sendOTPEmail(email, otp, firstName);
+    if (!emailResult.success) {
+      console.error('Failed to send OTP email:', emailResult.error);
+      // Still allow registration, but user needs to request OTP resend
+    }
 
     // Generate token
     const token = generateToken(user._id);
@@ -64,10 +107,18 @@ router.post('/register', async (req, res) => {
     // Return user data without password
     const userData = user.getPublicProfile();
 
+    // Different message for admin requests
+    const message = role === 'admin' 
+      ? 'Your admin account request has been submitted and is pending approval. Please verify your email to complete registration.'
+      : 'Registration successful! Please check your email for the verification OTP.';
+
     res.status(201).json({
-      message: 'User registered successfully',
+      message,
       token,
-      user: userData
+      user: userData,
+      requiresApproval: role === 'admin',
+      requiresEmailVerification: true,
+      emailSent: emailResult.success
     });
 
   } catch (error) {
@@ -147,6 +198,27 @@ router.post('/login', async (req, res) => {
     }
 
     console.log('✅ Login successful for user:', user.email);
+
+    // Check if email is verified
+    // Allow legacy accounts (created before email verification feature) to login
+    // Legacy accounts have emailVerificationOTP as null (never set)
+    const isLegacyAccount = user.emailVerificationOTP === null && user.emailVerificationOTPExpires === null;
+    
+    if (!user.isEmailVerified && !isLegacyAccount) {
+      // For new accounts that need verification
+      return res.status(403).json({
+        message: 'Please verify your email address before logging in. Check your email for the OTP.',
+        error: 'EMAIL_NOT_VERIFIED',
+        requiresVerification: true
+      });
+    }
+
+    // Auto-verify legacy accounts on first login (backward compatibility)
+    if (isLegacyAccount && !user.isEmailVerified) {
+      user.isEmailVerified = true;
+      await user.save();
+      console.log('✅ Legacy account auto-verified:', user.email);
+    }
 
     // Update last login
     user.lastLogin = new Date();
@@ -298,6 +370,308 @@ router.post('/verify-token', authenticateToken, (req, res) => {
     message: 'Token is valid',
     user: req.user.getPublicProfile()
   });
+});
+
+// @route   POST /api/auth/send-verification-otp
+// @desc    Send OTP to user's email for verification
+// @access  Private
+router.post('/send-verification-otp', authenticateToken, async (req, res) => {
+  try {
+    const user = req.user;
+
+    // Check if email is already verified
+    if (user.isEmailVerified) {
+      return res.status(400).json({
+        message: 'Email is already verified',
+        error: 'ALREADY_VERIFIED'
+      });
+    }
+
+    // Prevent sending OTP too frequently (within last 60 seconds)
+    if (user.emailVerificationOTPExpires) {
+      const timeSinceLastOTP = Date.now() - user.emailVerificationOTPExpires.getTime() + (10 * 60 * 1000);
+      const secondsSinceLastOTP = Math.floor(timeSinceLastOTP / 1000);
+      
+      if (secondsSinceLastOTP < 60) {
+        const remainingSeconds = 60 - secondsSinceLastOTP;
+        return res.status(429).json({
+          message: `Please wait ${remainingSeconds} seconds before requesting a new OTP.`,
+          error: 'RATE_LIMIT',
+          retryAfter: remainingSeconds
+        });
+      }
+    }
+
+    // Generate new OTP
+    const otp = generateOTP();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Update user with new OTP
+    user.emailVerificationOTP = otp;
+    user.emailVerificationOTPExpires = otpExpires;
+    await user.save();
+
+    // Send OTP email
+    const emailResult = await sendOTPEmail(user.email, otp, user.firstName);
+    
+    if (!emailResult.success) {
+      return res.status(500).json({
+        message: 'Failed to send verification email. Please try again later.',
+        error: 'EMAIL_SEND_FAILED'
+      });
+    }
+
+    res.json({
+      message: 'Verification OTP sent to your email. Please check your inbox.',
+      expiresIn: 10 // minutes
+    });
+
+  } catch (error) {
+    console.error('Send verification OTP error:', error);
+    res.status(500).json({
+      message: 'Server error while sending verification OTP',
+      error: 'SERVER_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/verify-email
+// @desc    Verify email with OTP
+// @access  Private
+router.post('/verify-email', authenticateToken, async (req, res) => {
+  try {
+    const { otp } = req.body;
+    const user = req.user;
+
+    // Validation
+    if (!otp) {
+      return res.status(400).json({
+        message: 'OTP is required',
+        error: 'MISSING_OTP'
+      });
+    }
+
+    // Check if email is already verified
+    if (user.isEmailVerified) {
+      return res.status(400).json({
+        message: 'Email is already verified',
+        error: 'ALREADY_VERIFIED'
+      });
+    }
+
+    // Check if OTP exists and is not expired
+    if (!user.emailVerificationOTP || !user.emailVerificationOTPExpires) {
+      return res.status(400).json({
+        message: 'No OTP found. Please request a new OTP.',
+        error: 'NO_OTP'
+      });
+    }
+
+    if (new Date() > user.emailVerificationOTPExpires) {
+      return res.status(400).json({
+        message: 'OTP has expired. Please request a new OTP.',
+        error: 'OTP_EXPIRED'
+      });
+    }
+
+    // Verify OTP
+    if (user.emailVerificationOTP !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP. Please try again.',
+        error: 'INVALID_OTP'
+      });
+    }
+
+    // Mark email as verified and clear OTP
+    user.isEmailVerified = true;
+    user.emailVerificationOTP = null;
+    user.emailVerificationOTPExpires = null;
+    await user.save();
+
+    // Return updated user data
+    const userData = user.getPublicProfile();
+
+    res.json({
+      message: 'Email verified successfully!',
+      user: userData
+    });
+
+  } catch (error) {
+    console.error('Verify email error:', error);
+    res.status(500).json({
+      message: 'Server error while verifying email',
+      error: 'SERVER_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/forgot-password
+// @desc    Request password reset OTP
+// @access  Public
+router.post('/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Validation
+    if (!email) {
+      return res.status(400).json({
+        message: 'Email is required',
+        error: 'MISSING_EMAIL'
+      });
+    }
+
+    // Validate email format
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        message: 'Please enter a valid email address',
+        error: 'INVALID_EMAIL'
+      });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    // Always return success message (security: don't reveal if email exists)
+    if (!user) {
+      return res.json({
+        message: 'If an account with this email exists, a password reset OTP has been sent.'
+      });
+    }
+
+    // Check if account is active
+    if (!user.isActive) {
+      return res.status(403).json({
+        message: 'Account is deactivated. Please contact support.',
+        error: 'ACCOUNT_DEACTIVATED'
+      });
+    }
+
+    // Prevent sending OTP too frequently (within last 60 seconds)
+    if (user.resetPasswordOTPExpires) {
+      const timeSinceLastOTP = Date.now() - user.resetPasswordOTPExpires.getTime() + (10 * 60 * 1000);
+      const secondsSinceLastOTP = Math.floor(timeSinceLastOTP / 1000);
+      
+      if (secondsSinceLastOTP < 60) {
+        const remainingSeconds = 60 - secondsSinceLastOTP;
+        return res.status(429).json({
+          message: `Please wait ${remainingSeconds} seconds before requesting a new OTP.`,
+          error: 'RATE_LIMIT',
+          retryAfter: remainingSeconds
+        });
+      }
+    }
+
+    // Generate OTP
+    const otp = generateOTP();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Update user with reset OTP
+    user.resetPasswordOTP = otp;
+    user.resetPasswordOTPExpires = otpExpires;
+    await user.save();
+
+    // Send password reset OTP email
+    const emailResult = await sendPasswordResetOTP(user.email, otp, user.firstName);
+    
+    if (!emailResult.success) {
+      return res.status(500).json({
+        message: 'Failed to send password reset email. Please try again later.',
+        error: 'EMAIL_SEND_FAILED'
+      });
+    }
+
+    res.json({
+      message: 'If an account with this email exists, a password reset OTP has been sent to your email.'
+    });
+
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({
+      message: 'Server error while processing password reset request',
+      error: 'SERVER_ERROR'
+    });
+  }
+});
+
+// @route   POST /api/auth/reset-password
+// @desc    Reset password with OTP
+// @access  Public
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+
+    // Validation
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({
+        message: 'Email, OTP, and new password are required',
+        error: 'MISSING_FIELDS'
+      });
+    }
+
+    if (!isValidEmail(email)) {
+      return res.status(400).json({
+        message: 'Please enter a valid email address',
+        error: 'INVALID_EMAIL'
+      });
+    }
+
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        message: 'Password must be at least 6 characters long',
+        error: 'PASSWORD_TOO_SHORT'
+      });
+    }
+
+    // Find user by email
+    const user = await User.findOne({ email: email.toLowerCase() });
+    
+    if (!user) {
+      return res.status(404).json({
+        message: 'Invalid email or OTP',
+        error: 'INVALID_CREDENTIALS'
+      });
+    }
+
+    // Check if OTP exists and is not expired
+    if (!user.resetPasswordOTP || !user.resetPasswordOTPExpires) {
+      return res.status(400).json({
+        message: 'No password reset request found. Please request a new OTP.',
+        error: 'NO_OTP'
+      });
+    }
+
+    if (new Date() > user.resetPasswordOTPExpires) {
+      return res.status(400).json({
+        message: 'OTP has expired. Please request a new password reset.',
+        error: 'OTP_EXPIRED'
+      });
+    }
+
+    // Verify OTP
+    if (user.resetPasswordOTP !== otp) {
+      return res.status(400).json({
+        message: 'Invalid OTP. Please try again.',
+        error: 'INVALID_OTP'
+      });
+    }
+
+    // Reset password
+    user.password = newPassword;
+    user.resetPasswordOTP = null;
+    user.resetPasswordOTPExpires = null;
+    await user.save();
+
+    res.json({
+      message: 'Password reset successfully! You can now login with your new password.'
+    });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({
+      message: 'Server error while resetting password',
+      error: 'SERVER_ERROR'
+    });
+  }
 });
 
 module.exports = router;
