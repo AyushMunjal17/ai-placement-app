@@ -24,6 +24,56 @@ import {
   X
 } from 'lucide-react'
 
+// Markers used inside language-specific templates to define the student-editable region
+// Example (C++):
+// // STUDENT_CODE_START
+// vector<int> twoSum(...) { ... }
+// // STUDENT_CODE_END
+// main() { ... }
+const STUDENT_CODE_START = 'STUDENT_CODE_START'
+const STUDENT_CODE_END = 'STUDENT_CODE_END'
+
+// Extract just the student-editable code from a full template.
+// If no markers are present, fall back to returning the whole template for backward compatibility.
+const extractStudentCodeFromTemplate = (template) => {
+  if (!template) return { studentCode: '', hasMarkers: false }
+
+  const lines = template.split('\n')
+  const startIdx = lines.findIndex(line => line.includes(STUDENT_CODE_START))
+  const endIdx = lines.findIndex(line => line.includes(STUDENT_CODE_END))
+
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    return { studentCode: template, hasMarkers: false }
+  }
+
+  const studentLines = lines.slice(startIdx + 1, endIdx)
+  return {
+    studentCode: studentLines.join('\n'),
+    hasMarkers: true
+  }
+}
+
+// Rebuild the full program by injecting the current student code between the marker lines.
+// If markers are missing, fall back to sending only the student code (current behavior).
+const buildFullCodeFromStudentCode = (template, studentCode) => {
+  if (!template) return studentCode
+
+  const lines = template.split('\n')
+  const startIdx = lines.findIndex(line => line.includes(STUDENT_CODE_START))
+  const endIdx = lines.findIndex(line => line.includes(STUDENT_CODE_END))
+
+  if (startIdx === -1 || endIdx === -1 || endIdx <= startIdx) {
+    return studentCode
+  }
+
+  const before = lines.slice(0, startIdx + 1) // include START marker line
+  const after = lines.slice(endIdx) // include END marker line
+  const studentLines = (studentCode || '').split('\n')
+
+  const fullLines = [...before, ...studentLines, ...after]
+  return fullLines.join('\n')
+}
+
 const ProblemDetail = () => {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -43,7 +93,11 @@ const ProblemDetail = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [output, setOutput] = useState('')
   const [testResults, setTestResults] = useState([])
+  const [lastRunResults, setLastRunResults] = useState([])
+  const [lastRunOutput, setLastRunOutput] = useState('')
   const [showOutput, setShowOutput] = useState(false)
+  const [lastAction, setLastAction] = useState(null) // 'run' or 'submit'
+  const [showSubmitPanel, setShowSubmitPanel] = useState(false)
   
   // UI state
   const [activeTab, setActiveTab] = useState('description')
@@ -56,13 +110,22 @@ const ProblemDetail = () => {
   const [showAiModal, setShowAiModal] = useState(false)
 
   // Language configurations
-  const languages = {
-    python: { id: 71, name: 'Python 3', template: '# Write your solution here\ndef solution():\n    pass\n\n# Test your solution\nif __name__ == "__main__":\n    solution()' },
-    javascript: { id: 63, name: 'JavaScript', template: '// Write your solution here\nfunction solution() {\n    // Your code here\n}\n\n// Test your solution\nconsole.log(solution());' },
-    java: { id: 62, name: 'Java', template: 'public class Solution {\n    public static void main(String[] args) {\n        // Write your solution here\n    }\n}' },
-    cpp: { id: 54, name: 'C++', template: '#include <iostream>\n#include <vector>\nusing namespace std;\n\nint main() {\n    // Write your solution here\n    return 0;\n}' },
-    c: { id: 50, name: 'C', template: '#include <stdio.h>\n\nint main() {\n    // Write your solution here\n    return 0;\n}' }
+  const allLanguages = {
+    python: { id: 71, name: 'Python 3', template: '# Write your solution here\n# Define the required function based on the problem statement\n' },
+    javascript: { id: 63, name: 'JavaScript', template: '// Write your solution here\n// Define the required function based on the problem statement\n' },
+    java: { id: 62, name: 'Java', template: '// Write your solution here\n// Define the required method based on the problem statement\n' },
+    cpp: { id: 54, name: 'C++', template: '// Write your solution here\n// Define the required function based on the problem statement\n' },
+    c: { id: 50, name: 'C', template: '// Write your solution here\n// Define the required function based on the problem statement\n' }
   }
+
+  // Filter languages based on problem's supported languages
+  const languages = problem?.supportedLanguages && problem.supportedLanguages.length > 0
+    ? Object.fromEntries(
+        Object.entries(allLanguages).filter(([key]) => 
+          problem.supportedLanguages.includes(key)
+        )
+      )
+    : allLanguages
 
   const difficultyColors = {
     Easy: 'text-green-600 bg-green-50 border-green-200',
@@ -76,18 +139,55 @@ const ProblemDetail = () => {
   }, [id])
 
   useEffect(() => {
-    // Set default code template when language changes
-    if (languages[language]) {
-      setCode(languages[language].template)
+    if (!problem) return
+
+    // Set default language to first supported language if current language is not supported
+    if (problem.supportedLanguages && problem.supportedLanguages.length > 0) {
+      if (!problem.supportedLanguages.includes(language)) {
+        setLanguage(problem.supportedLanguages[0])
+        return
+      }
     }
-  }, [language])
+
+    // Set default code template when language changes
+    const supportedLangs = problem.supportedLanguages || Object.keys(allLanguages)
+    const availableLanguages = Object.fromEntries(
+      Object.entries(allLanguages).filter(([key]) => supportedLangs.includes(key))
+    )
+
+    if (availableLanguages[language]) {
+      let baseTemplate
+      if (problem.codeTemplates && problem.codeTemplates[language] && problem.codeTemplates[language].trim().length > 0) {
+        baseTemplate = problem.codeTemplates[language]
+      } else {
+        baseTemplate = availableLanguages[language].template
+      }
+
+      const { studentCode } = extractStudentCodeFromTemplate(baseTemplate)
+      setCode(studentCode)
+    }
+  }, [language, problem])
 
   const fetchProblem = async () => {
     try {
       setLoading(true)
       const response = await axios.get(`/problems/${id}`)
-      setProblem(response.data.problem)
-      setCode(languages[language].template)
+      const fetchedProblem = response.data.problem
+      setProblem(fetchedProblem)
+
+      // Set default language to first supported language
+      const supportedLangs = fetchedProblem.supportedLanguages || ['python']
+      if (!supportedLangs.includes(language)) {
+        setLanguage(supportedLangs[0])
+      }
+
+      const templates = fetchedProblem.codeTemplates || {}
+      const currentLang = supportedLangs.includes(language) ? language : supportedLangs[0]
+      const baseTemplate = templates[currentLang] && templates[currentLang].trim().length > 0
+        ? templates[currentLang]
+        : allLanguages[currentLang]?.template || allLanguages.python.template
+      const { studentCode } = extractStudentCodeFromTemplate(baseTemplate)
+      setCode(studentCode)
       setError('')
     } catch (err) {
       setError('Failed to load problem. Please try again.')
@@ -113,6 +213,7 @@ const ProblemDetail = () => {
     if (!code.trim()) {
       setOutput('Please write some code first!')
       setShowOutput(true)
+      setLastAction('run')
       return
     }
 
@@ -120,24 +221,101 @@ const ProblemDetail = () => {
     setOutput('')
     setTestResults([])
     setShowOutput(true)
+    setLastAction('run') // Set this first to ensure UI updates
+    setLastRunResults([])
+    setLastRunOutput('')
+
+    // Build full code using problem-specific template and hidden harness (if configured)
+    const baseTemplate = (problem?.codeTemplates && problem.codeTemplates[language] && problem.codeTemplates[language].trim().length > 0)
+      ? problem.codeTemplates[language]
+      : languages[language].template
+    const finalCode = buildFullCodeFromStudentCode(baseTemplate, code)
 
     try {
       const response = await axios.post('/submissions/run', {
-        code,
+        code: finalCode,
         language_id: language, // Send language name (python, javascript, etc.)
         problemId: id
       })
 
+      console.log('Run response:', response.data) // Debug log
+
       // Check if response has test results (new format)
-      if (response.data.testResults) {
-        setTestResults(response.data.testResults)
-        setOutput('')
-      } else {
+      if (response.data.testResults && Array.isArray(response.data.testResults)) {
+        console.log('Found testResults array with length:', response.data.testResults.length, response.data.testResults)
+        if (response.data.testResults.length > 0) {
+          console.log('Setting test results:', response.data.testResults)
+          // Update states - ensure lastAction is set first
+          setLastAction('run')
+          setShowOutput(true)
+          setTestResults(response.data.testResults)
+          setLastRunResults(response.data.testResults)
+          setLastRunOutput('')
+          setOutput('')
+          console.log('State updated - testResults:', response.data.testResults.length, 'items')
+        } else {
+          // Empty array - show verdict instead
+          console.log('Empty testResults, showing verdict')
+          const verdictResults = [{
+            testCaseNumber: 1,
+            passed: response.data.verdict === 'Accepted',
+            status: response.data.verdict || 'Unknown',
+            input: 'Sample test case',
+            expectedOutput: 'Expected output',
+            actualOutput: `Passed: ${response.data.passedTestCases || 0}/${response.data.totalTestCases || 0}`
+          }]
+          setTestResults(verdictResults)
+          setLastRunResults(verdictResults)
+          setLastRunOutput('')
+          setOutput('')
+        }
+        setShowOutput(true)
+      } else if (response.data.output !== undefined) {
         // Fallback to old format (custom input)
-        setOutput(response.data.output || response.data.error || 'No output')
+        console.log('Using output format:', response.data.output)
+        const runOutput = response.data.output || response.data.error || 'No output'
+        setTestResults([])
+        setLastRunResults([])
+        setLastRunOutput(runOutput)
+        setOutput(runOutput)
+        setShowOutput(true)
+        setLastAction('run')
+      } else {
+        // No output or error - but still show something
+        console.log('No test results or output found, full response:', response.data)
+        // Even if testResults is empty array, try to show verdict info
+        if (response.data.verdict || response.data.passedTestCases !== undefined) {
+          const verdictResults = [{
+            testCaseNumber: 1,
+            passed: response.data.verdict === 'Accepted',
+            status: response.data.verdict || 'Unknown',
+            input: 'Sample test case',
+            expectedOutput: 'Expected output',
+            actualOutput: `Passed: ${response.data.passedTestCases || 0}/${response.data.totalTestCases || 0}`
+          }]
+          setTestResults(verdictResults)
+          setLastRunResults(verdictResults)
+          setLastRunOutput('')
+          setOutput('')
+        } else {
+          const fallbackMessage = 'No output received. Response: ' + JSON.stringify(response.data)
+          setTestResults([])
+          setLastRunResults([])
+          setLastRunOutput(fallbackMessage)
+          setOutput(fallbackMessage)
+        }
+        setShowOutput(true)
+        setLastAction('run')
       }
     } catch (err) {
-      setOutput('Error running code: ' + (err.response?.data?.message || err.message))
+      console.error('Run error:', err)
+      const errorMsg = 'Error running code: ' + (err.response?.data?.message || err.message)
+      setTestResults([])
+      setLastRunResults([])
+      setLastRunOutput(errorMsg)
+      setOutput(errorMsg)
+      setShowOutput(true)
+      setLastAction('run')
     } finally {
       setIsRunning(false)
     }
@@ -154,11 +332,19 @@ const ProblemDetail = () => {
     setTestResults([])
     setOutput('')
     setShowOutput(true)
+    setLastAction('submit')
+    setShowSubmitPanel(false)
+
+    // Build full code using problem-specific template and hidden harness (if configured)
+    const baseTemplate = (problem?.codeTemplates && problem.codeTemplates[language] && problem.codeTemplates[language].trim().length > 0)
+      ? problem.codeTemplates[language]
+      : languages[language].template
+    const finalCode = buildFullCodeFromStudentCode(baseTemplate, code)
 
     try {
       const response = await axios.post('/submissions/submit', {
         problemId: id,
-        code,
+        code: finalCode,
         language_id: language // Send language name (python, javascript, etc.)
       })
 
@@ -166,6 +352,7 @@ const ProblemDetail = () => {
       if (response.data.testResults) {
         setTestResults(response.data.testResults)
         setOutput('')
+        setShowSubmitPanel(true)
         // Refresh submissions after successful submit
         fetchSubmissions()
       } else {
@@ -186,15 +373,30 @@ const ProblemDetail = () => {
       return
     }
 
-    // Get error message from test results or output
-    const errorMessage = testResults.length > 0
-      ? testResults.filter(r => !r.passed).map(r => r.error || r.status).join('\n')
-      : output || 'Code is not producing expected output'
+    // Use current test results if visible, otherwise fall back to last run data
+    const runResultsSource = (testResults.length > 0 ? testResults : lastRunResults) || []
+    const failingResults = runResultsSource.filter(r => r && r.passed === false)
+    const outputSource = output || lastRunOutput
 
-    if (!errorMessage || errorMessage === 'No output yet. Run your code to see results.') {
+    let errorMessage = ''
+    if (failingResults.length > 0) {
+      errorMessage = failingResults
+        .map(r => r.error || r.status || 'Test case failed')
+        .join('\n')
+    } else if (outputSource) {
+      errorMessage = outputSource
+    }
+
+    const hasRunContext = (lastAction === 'run') || runResultsSource.length > 0 || !!outputSource
+
+    if ((!errorMessage || errorMessage === 'No output yet. Run your code to see results.') && !hasRunContext) {
       setAiResponse('Please run your code first to see errors, then I can help debug!')
       setShowAiModal(true)
       return
+    }
+
+    if (!errorMessage) {
+      errorMessage = 'Sample tests passed, but I still need help improving or understanding my solution.'
     }
 
     setAiDebugging(true)
@@ -271,7 +473,9 @@ const ProblemDetail = () => {
               Back
             </Button>
             <div className="h-6 w-px bg-border" />
-            <h1 className="text-lg font-semibold">{problem?.title}</h1>
+            <h1 className="text-lg font-semibold">
+              {problem?.title ? problem.title.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
+            </h1>
             <span className={`px-2 py-0.5 rounded text-xs font-medium border ${difficultyColors[problem?.difficulty]}`}>
               {problem?.difficulty}
             </span>
@@ -288,6 +492,11 @@ const ProblemDetail = () => {
                 <option key={key} value={key}>{lang.name}</option>
               ))}
             </Select>
+            {problem?.supportedLanguages && problem.supportedLanguages.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                ({problem.supportedLanguages.length} language{problem.supportedLanguages.length !== 1 ? 's' : ''} available)
+              </span>
+            )}
             <Select value={theme} onChange={(e) => setTheme(e.target.value)} className="w-[120px]">
               <option value="vs-dark">Dark</option>
               <option value="light">Light</option>
@@ -373,27 +582,120 @@ const ProblemDetail = () => {
           <div className="flex-1 overflow-y-auto">
             {activeTab === 'description' && (
               <div className="p-6">
-                {/* Test Results - Show at top when available */}
-                {testResults.length > 0 && (
-                  <div className="mb-6">
-                    <div className={`p-4 rounded-lg border-2 ${testResults.every(r => r.passed) ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
-                      <div className="flex items-center gap-2 mb-2">
-                        {testResults.every(r => r.passed) ? (
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                        ) : (
-                          <AlertCircle className="h-5 w-5 text-red-600" />
-                        )}
-                        <span className={`font-bold text-lg ${testResults.every(r => r.passed) ? 'text-green-700' : 'text-red-700'}`}>
-                          {testResults.every(r => r.passed) ? 'Accepted' : 'Wrong Answer'}
-                        </span>
+                {/* Run Results Panel - shown above problem statement */}
+                {lastAction === 'run' && Array.isArray(testResults) && testResults.length > 0 && (
+                  <div className="mb-6 sticky top-0 z-10 bg-white pb-4 border-b">
+                    <div className={`p-4 rounded-lg border-2 ${testResults.every(r => r.passed) ? 'bg-green-50 border-green-500' : 'bg-yellow-50 border-yellow-500'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {testResults.every(r => r.passed) ? (
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-yellow-600" />
+                          )}
+                          <span className={`font-bold text-lg ${testResults.every(r => r.passed) ? 'text-green-700' : 'text-yellow-700'}`}>
+                            {testResults.every(r => r.passed) ? 'All Sample Tests Passed' : 'Some Sample Tests Failed'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setTestResults([])
+                            setLastAction('')
+                            setShowOutput(false)
+                          }}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="Close panel"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
                       </div>
                       <div className="text-sm font-medium mb-3">
                         Test Cases Passed: {testResults.filter(r => r.passed).length}/{testResults.length}
                       </div>
-                      
 
                       {/* Individual Test Results */}
-                      <div className="space-y-2">
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {testResults.map((result, index) => (
+                          <div key={index} className={`border rounded p-3 ${result.passed ? 'bg-white border-green-300' : 'bg-white border-yellow-300'}`}>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {result.passed ? (
+                                  <CheckCircle className="h-4 w-4 text-green-600" />
+                                ) : (
+                                  <AlertCircle className="h-4 w-4 text-yellow-600" />
+                                )}
+                                <span className="font-medium text-sm">
+                                  Sample Test {result.testCaseNumber || index + 1}: {result.passed ? 'Passed' : result.status || 'Failed'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-2 text-xs mt-2">
+                              {result.input && (
+                                <div>
+                                  <span className="font-medium">Input:</span>
+                                  <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto whitespace-pre-wrap">{result.input}</pre>
+                                </div>
+                              )}
+                              {result.expectedOutput && (
+                                <div>
+                                  <span className="font-medium">Expected:</span>
+                                  <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto whitespace-pre-wrap">{result.expectedOutput}</pre>
+                                </div>
+                              )}
+                              {result.actualOutput && (
+                                <div>
+                                  <span className="font-medium">Your Output:</span>
+                                  <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto whitespace-pre-wrap">{result.actualOutput}</pre>
+                                </div>
+                              )}
+                              {result.error && (
+                                <div>
+                                  <span className="font-medium text-red-600">Error:</span>
+                                  <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto text-red-600 whitespace-pre-wrap">{result.error}</pre>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Submit Results Panel - shown above problem statement */}
+                {lastAction === 'submit' && showSubmitPanel && testResults.length > 0 && (
+                  <div className="mb-6 sticky top-0 z-10 bg-white pb-4 border-b">
+                    <div className={`p-4 rounded-lg border-2 ${testResults.every(r => r.passed) ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          {testResults.every(r => r.passed) ? (
+                            <CheckCircle className="h-5 w-5 text-green-600" />
+                          ) : (
+                            <AlertCircle className="h-5 w-5 text-red-600" />
+                          )}
+                          <span className={`font-bold text-lg ${testResults.every(r => r.passed) ? 'text-green-700' : 'text-red-700'}`}>
+                            {testResults.every(r => r.passed) ? 'Accepted' : 'Wrong Answer'}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowSubmitPanel(false)
+                            setTestResults([])
+                          }}
+                          className="text-muted-foreground hover:text-foreground transition-colors"
+                          aria-label="Close panel"
+                        >
+                          <X className="h-5 w-5" />
+                        </button>
+                      </div>
+                      <div className="text-sm font-medium mb-3">
+                        Test Cases Passed: {testResults.filter(r => r.passed).length}/{testResults.length}
+                      </div>
+
+                      {/* Individual Test Results (including hidden, with hidden inputs/outputs masked) */}
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
                         {testResults.map((result, index) => (
                           <div key={index} className={`border rounded p-3 ${result.passed ? 'bg-white border-green-300' : 'bg-white border-red-300'}`}>
                             <div className="flex items-center justify-between mb-2">
@@ -408,6 +710,7 @@ const ProblemDetail = () => {
                                 </span>
                               </div>
                             </div>
+                            {/* For submit, we only show full details for sample tests; hidden tests keep input/output masked */}
                             {!result.passed && (
                               <div className="space-y-2 text-xs mt-2">
                                 {result.input && result.input !== 'Hidden' && (
@@ -445,39 +748,87 @@ const ProblemDetail = () => {
 
                 <div className="space-y-6">
                   {/* Tags */}
-                  {(problem?.tags?.length > 0 || problem?.companyTags?.length > 0) && (
-                    <div className="flex flex-wrap gap-2">
-                      {problem?.tags?.map((tag, index) => (
-                        <span key={index} className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded border border-blue-200">
-                          {tag}
-                        </span>
-                      ))}
-                      {problem?.companyTags?.map((company, index) => (
-                        <span key={index} className="px-2 py-1 bg-green-50 text-green-600 text-xs rounded border border-green-200 font-medium">
-                          {company}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+                  {(() => {
+                    // Helper function to strip HTML and extract tags
+                    const stripHtml = (str) => {
+                      if (!str) return ''
+                      return String(str).replace(/<[^>]*>/g, '').trim()
+                    }
+                    
+                    // Process tags - handle both array and string formats
+                    let processedTags = []
+                    if (Array.isArray(problem?.tags)) {
+                      processedTags = problem.tags
+                        .map(tag => stripHtml(tag))
+                        .filter(tag => tag)
+                    } else if (problem?.tags) {
+                      // If tags is a string, split by comma and strip HTML
+                      const tagsStr = stripHtml(problem.tags)
+                      processedTags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
+                    }
+                    
+                    // Process company tags - handle both array and string formats
+                    let processedCompanyTags = []
+                    if (Array.isArray(problem?.companyTags)) {
+                      processedCompanyTags = problem.companyTags
+                        .map(company => stripHtml(company))
+                        .filter(company => company)
+                    } else if (problem?.companyTags) {
+                      // If companyTags is a string, split by comma and strip HTML
+                      const companiesStr = stripHtml(problem.companyTags)
+                      processedCompanyTags = companiesStr.split(',').map(c => c.trim()).filter(c => c)
+                    }
+                    
+                    if (processedTags.length === 0 && processedCompanyTags.length === 0) {
+                      return null
+                    }
+                    
+                    return (
+                      <div className="flex flex-wrap gap-2">
+                        {processedTags.map((tag, index) => (
+                          <span key={index} className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded border border-blue-200">
+                            {tag}
+                          </span>
+                        ))}
+                        {processedCompanyTags.map((company, index) => (
+                          <span key={index} className="px-2 py-1 bg-green-50 text-green-600 text-xs rounded border border-green-200 font-medium">
+                            {company}
+                          </span>
+                        ))}
+                      </div>
+                    )
+                  })()}
 
                   <div>
                     <h3 className="text-base font-semibold mb-2">Problem Description</h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{problem?.description}</p>
+                    <div
+                      className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: problem?.description || '' }}
+                    />
                   </div>
 
                   <div>
                     <h3 className="text-base font-semibold mb-2">Input Format</h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{problem?.inputFormat}</p>
+                    <div
+                      className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: problem?.inputFormat || '' }}
+                    />
                   </div>
 
                   <div>
                     <h3 className="text-base font-semibold mb-2">Output Format</h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{problem?.outputFormat}</p>
+                    <div
+                      className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: problem?.outputFormat || '' }}
+                    />
                   </div>
 
                   <div>
                     <h3 className="text-base font-semibold mb-2">Constraints</h3>
-                    <p className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">{problem?.constraints}</p>
+                    <div
+                      className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: problem?.constraints || '' }}
+                    />
                   </div>
 
                   {problem?.sampleTestCases && problem.sampleTestCases.length > 0 && (
@@ -605,6 +956,39 @@ const ProblemDetail = () => {
               }
             }}
           />
+
+
+          {lastAction === 'run' && !isRunning && testResults.length === 0 && showOutput && (
+            <div className="border-t bg-muted/30 p-3 text-sm">
+              <div className="text-xs font-medium text-muted-foreground mb-1">Output</div>
+              <pre className="bg-gray-50 p-2 rounded border max-h-40 overflow-auto whitespace-pre-wrap">
+                {output || 'No output yet. Run your code to see results.'}
+              </pre>
+            </div>
+          )}
+
+          {/* Debug: Always show when run is clicked, even if no results */}
+          {lastAction === 'run' && !isRunning && testResults.length === 0 && !output && (
+            <div className="border-t bg-yellow-50 p-3 text-sm">
+              <div className="text-xs font-medium text-yellow-700 mb-1">Debug Info</div>
+              <pre className="bg-white p-2 rounded border max-h-40 overflow-auto whitespace-pre-wrap text-xs">
+                {`Last Action: ${lastAction}
+Test Results Length: ${testResults.length}
+Show Output: ${showOutput}
+Is Running: ${isRunning}
+Check browser console for API response details.`}
+              </pre>
+            </div>
+          )}
+
+          {lastAction === 'run' && isRunning && (
+            <div className="border-t bg-muted/30 p-3 text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Running code...</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

@@ -27,6 +27,9 @@ const AdminDashboard = () => {
     admins: [],
     statistics: {}
   })
+  const [students, setStudents] = useState([])
+  const [selectedStudent, setSelectedStudent] = useState(null)
+  const [loadingStudentDetail, setLoadingStudentDetail] = useState(false)
 
   useEffect(() => {
     // Redirect if not admin
@@ -41,12 +44,28 @@ const AdminDashboard = () => {
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
-      const response = await axios.get('/admin/dashboard')
-      setDashboardData(response.data)
+      const [dashboardRes, studentsRes] = await Promise.all([
+        axios.get('/admin/dashboard'),
+        axios.get('/admin/students/stats')
+      ])
+      setDashboardData(dashboardRes.data)
+      setStudents(studentsRes.data.students || [])
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchStudentDetail = async (studentId) => {
+    try {
+      setLoadingStudentDetail(true)
+      const response = await axios.get(`/admin/students/${studentId}`)
+      setSelectedStudent(response.data)
+    } catch (error) {
+      console.error('Failed to fetch student details:', error)
+    } finally {
+      setLoadingStudentDetail(false)
     }
   }
 
@@ -204,6 +223,17 @@ const AdminDashboard = () => {
           Problems ({problems.length})
         </button>
         <button
+          onClick={() => setActiveTab('students')}
+          className={`px-4 py-2 font-medium transition-colors ${
+            activeTab === 'students'
+              ? 'text-blue-600 border-b-2 border-blue-600'
+              : 'text-gray-600 hover:text-gray-900'
+          }`}
+        >
+          <Users className="h-4 w-4 inline mr-2" />
+          Students ({students.length})
+        </button>
+        <button
           onClick={() => setActiveTab('admins')}
           className={`px-4 py-2 font-medium transition-colors ${
             activeTab === 'admins'
@@ -228,10 +258,13 @@ const AdminDashboard = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
-                  {problems.slice(0, 5).map((problem) => (
+                  {problems.slice(0, 5).map((problem) => {
+                    const stripHtml = (str) => str ? String(str).replace(/<[^>]*>/g, '').trim() : ''
+                    const cleanTitle = stripHtml(problem.title)
+                    return (
                     <div key={problem._id} className="flex items-center justify-between p-3 border rounded-lg">
                       <div className="flex-1">
-                        <h4 className="font-medium">{problem.title}</h4>
+                        <h4 className="font-medium">{cleanTitle || 'Untitled Problem'}</h4>
                         <p className="text-sm text-muted-foreground">
                           By {problem.publishedBy?.username || 'Unknown'}
                         </p>
@@ -244,7 +277,8 @@ const AdminDashboard = () => {
                         {problem.difficulty}
                       </span>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </CardContent>
             </Card>
@@ -283,11 +317,31 @@ const AdminDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {problems.map((problem) => (
+                {problems.map((problem) => {
+                  // Helper to strip HTML
+                  const stripHtml = (str) => {
+                    if (!str) return ''
+                    return String(str).replace(/<[^>]*>/g, '').trim()
+                  }
+                  
+                  const cleanTitle = stripHtml(problem.title)
+                  
+                  // Process tags - handle both array and string formats
+                  let processedTags = []
+                  if (Array.isArray(problem.tags)) {
+                    processedTags = problem.tags
+                      .map(tag => stripHtml(tag))
+                      .filter(tag => tag)
+                  } else if (problem.tags) {
+                    const tagsStr = stripHtml(problem.tags)
+                    processedTags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
+                  }
+                  
+                  return (
                   <div key={problem._id} className="flex items-center justify-between p-4 border rounded-lg">
                     <div className="flex-1">
                       <div className="flex items-center gap-3">
-                        <h4 className="font-medium">{problem.title}</h4>
+                        <h4 className="font-medium">{cleanTitle || 'Untitled Problem'}</h4>
                         <span className={`px-2 py-1 text-xs rounded ${
                           problem.difficulty === 'Easy' ? 'bg-green-100 text-green-700' :
                           problem.difficulty === 'Medium' ? 'bg-yellow-100 text-yellow-700' :
@@ -310,9 +364,9 @@ const AdminDashboard = () => {
                       <p className="text-sm text-muted-foreground mt-1">
                         By {problem.publishedBy?.username || 'Unknown'} • {new Date(problem.createdAt).toLocaleDateString()}
                       </p>
-                      {problem.tags && problem.tags.length > 0 && (
+                      {processedTags.length > 0 && (
                         <div className="flex gap-2 mt-2">
-                          {problem.tags.slice(0, 3).map((tag, idx) => (
+                          {processedTags.slice(0, 3).map((tag, idx) => (
                             <span key={idx} className="px-2 py-0.5 text-xs bg-blue-50 text-blue-600 rounded">
                               {tag}
                             </span>
@@ -345,8 +399,55 @@ const AdminDashboard = () => {
                       </Button>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {activeTab === 'students' && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Students</CardTitle>
+              <CardDescription>View student progress and performance</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {students.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No students found.</p>
+              ) : (
+                <div className="space-y-3">
+                  {students.map((student) => (
+                    <div key={student._id} className="flex items-center justify-between p-4 border rounded-lg">
+                      <div>
+                        <h4 className="font-medium">
+                          {student.firstName} {student.lastName}
+                        </h4>
+                        <p className="text-sm text-muted-foreground">
+                          @{student.username} • {student.email}
+                        </p>
+                        <div className="flex gap-4 text-xs text-muted-foreground mt-1">
+                          <span>Problems Solved: <span className="font-semibold text-foreground">{student.problemsSolved}</span></span>
+                          <span>Submissions: <span className="font-semibold text-foreground">{student.totalSubmissions}</span></span>
+                          <span>Accuracy: <span className="font-semibold text-foreground">{student.accuracy}%</span></span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          Last activity: {new Date(student.lastActivity).toLocaleString()}
+                        </span>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => fetchStudentDetail(student._id)}
+                        >
+                          View Details
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -379,6 +480,173 @@ const AdminDashboard = () => {
           </Card>
         )}
       </div>
+
+      {selectedStudent && (
+        <div className="fixed inset-0 bg-black/40 flex justify-end z-50">
+          <div className="bg-white w-full max-w-3xl h-full shadow-xl flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div>
+                <h2 className="text-xl font-bold">
+                  {selectedStudent.student.firstName} {selectedStudent.student.lastName}
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  @{selectedStudent.student.username} • {selectedStudent.student.email}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setSelectedStudent(null)}
+                disabled={loadingStudentDetail}
+              >
+                Close
+              </Button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Card>
+                  <CardHeader className="pb-1">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">Problems Solved</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{selectedStudent.student.problemsSolved}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-1">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">Total Submissions</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{selectedStudent.student.totalSubmissions}</div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardHeader className="pb-1">
+                    <CardTitle className="text-xs font-medium text-muted-foreground">Accuracy</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-2xl font-bold">{selectedStudent.student.accuracy}%</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {selectedStudent.bestProblem && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Best Performing Problem</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="font-medium">
+                      {selectedStudent.bestProblem.title ? selectedStudent.bestProblem.title.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Attempts until first accept: {selectedStudent.bestProblem.attemptsUntilFirstAccept}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {selectedStudent.worstProblem && (
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-medium">Most Challenging Problem</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="font-medium">
+                      {selectedStudent.worstProblem.title ? selectedStudent.worstProblem.title.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Total submissions: {selectedStudent.worstProblem.totalSubmissions}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Problems Solved</CardTitle>
+                  <CardDescription>List of all problems this student has successfully solved</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {selectedStudent.problems.filter(p => p.acceptedSubmissions > 0).length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No problems solved yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedStudent.problems
+                        .filter(p => p.acceptedSubmissions > 0)
+                        .map((p) => (
+                          <div key={p.problemId} className="flex items-center justify-between p-3 border rounded-lg bg-green-50/50">
+                            <div>
+                              <p className="font-medium">
+                                {p.title ? p.title.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                Difficulty: {p.difficulty} • First solved in {p.totalSubmissions} attempt{p.totalSubmissions !== 1 ? 's' : ''}
+                              </p>
+                            </div>
+                            <div className="text-xs text-muted-foreground text-right">
+                              <p>
+                                <span className="font-semibold text-green-600">✓ Solved</span>
+                              </p>
+                              <p>
+                                Total attempts: <span className="font-semibold text-foreground">{p.totalSubmissions}</span>
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>Problem-wise Performance</CardTitle>
+                  <CardDescription>Complete submission history for all problems</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {selectedStudent.problems.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No submissions yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {selectedStudent.problems.map((p) => (
+                        <div key={p.problemId} className={`flex items-center justify-between p-3 border rounded-lg ${p.acceptedSubmissions > 0 ? 'bg-green-50/30' : 'bg-red-50/30'}`}>
+                          <div>
+                            <p className="font-medium">
+                              {p.title ? p.title.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Difficulty: {p.difficulty}
+                            </p>
+                          </div>
+                          <div className="text-xs text-muted-foreground text-right">
+                            <p>
+                              Submissions: <span className="font-semibold text-foreground">{p.totalSubmissions}</span>
+                            </p>
+                            <p>
+                              Accepted: <span className={`font-semibold ${p.acceptedSubmissions > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                {p.acceptedSubmissions}
+                              </span>
+                            </p>
+                            {p.lastStatus && (
+                              <p className="mt-1">
+                                Last status: <span className={`font-semibold ${p.lastStatus === 'Accepted' ? 'text-green-600' : 'text-red-600'}`}>
+                                  {p.lastStatus}
+                                </span>
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -310,7 +310,7 @@ const Problems = () => {
                   {/* Title */}
                   <div className="col-span-4">
                     <div className="font-medium hover:text-blue-600 transition-colors">
-                      {problem.title}
+                      {problem.title ? problem.title.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
                     </div>
                   </div>
 
@@ -334,68 +334,110 @@ const Problems = () => {
 
                   {/* Companies */}
                   <div className="col-span-2">
-                    {problem.companyTags && problem.companyTags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 group">
-                        {problem.companyTags.slice(0, 2).map((company, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium"
-                          >
-                            {company}
-                          </span>
-                        ))}
-                        {problem.companyTags.length > 2 && (
-                          <>
-                            {problem.companyTags.slice(2).map((company, idx) => (
-                              <span
-                                key={idx + 2}
-                                className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium hidden group-hover:inline-block"
-                              >
-                                {company}
-                              </span>
-                            ))}
-                            <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded cursor-pointer group-hover:hidden">
-                              +{problem.companyTags.length - 2}
+                    {(() => {
+                      // Helper to strip HTML
+                      const stripHtml = (str) => {
+                        if (!str) return ''
+                        return String(str).replace(/<[^>]*>/g, '').trim()
+                      }
+                      
+                      // Process company tags - handle both array and string formats
+                      let processedCompanyTags = []
+                      if (Array.isArray(problem.companyTags)) {
+                        processedCompanyTags = problem.companyTags
+                          .map(company => stripHtml(company))
+                          .filter(company => company)
+                      } else if (problem.companyTags) {
+                        const companiesStr = stripHtml(problem.companyTags)
+                        processedCompanyTags = companiesStr.split(',').map(c => c.trim()).filter(c => c)
+                      }
+                      
+                      if (processedCompanyTags.length === 0) {
+                        return <span className="text-xs text-muted-foreground">-</span>
+                      }
+                      
+                      return (
+                        <div className="flex flex-wrap gap-1 group">
+                          {processedCompanyTags.slice(0, 2).map((company, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium"
+                            >
+                              {company}
                             </span>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">-</span>
-                    )}
+                          ))}
+                          {processedCompanyTags.length > 2 && (
+                            <>
+                              {processedCompanyTags.slice(2).map((company, idx) => (
+                                <span
+                                  key={idx + 2}
+                                  className="px-2 py-0.5 bg-green-50 text-green-700 text-xs rounded border border-green-200 font-medium hidden group-hover:inline-block"
+                                >
+                                  {company}
+                                </span>
+                              ))}
+                              <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded cursor-pointer group-hover:hidden">
+                                +{processedCompanyTags.length - 2}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   {/* Topics */}
                   <div className="col-span-2">
-                    {problem.tags && problem.tags.length > 0 ? (
-                      <div className="flex flex-wrap gap-1 group">
-                        {problem.tags.slice(0, 2).map((tag, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                        {problem.tags.length > 2 && (
-                          <>
-                            {problem.tags.slice(2).map((tag, idx) => (
-                              <span
-                                key={idx + 2}
-                                className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded hidden group-hover:inline-block"
-                              >
-                                {tag}
-                              </span>
-                            ))}
-                            <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded cursor-pointer group-hover:hidden">
-                              +{problem.tags.length - 2}
+                    {(() => {
+                      // Helper to strip HTML
+                      const stripHtml = (str) => {
+                        if (!str) return ''
+                        return String(str).replace(/<[^>]*>/g, '').trim()
+                      }
+                      
+                      // Process tags - handle both array and string formats
+                      let processedTags = []
+                      if (Array.isArray(problem.tags)) {
+                        processedTags = problem.tags
+                          .map(tag => stripHtml(tag))
+                          .filter(tag => tag)
+                      } else if (problem.tags) {
+                        const tagsStr = stripHtml(problem.tags)
+                        processedTags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
+                      }
+                      
+                      if (processedTags.length === 0) {
+                        return <span className="text-xs text-muted-foreground">-</span>
+                      }
+                      
+                      return (
+                        <div className="flex flex-wrap gap-1 group">
+                          {processedTags.slice(0, 2).map((tag, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded"
+                            >
+                              {tag}
                             </span>
-                          </>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">-</span>
-                    )}
+                          ))}
+                          {processedTags.length > 2 && (
+                            <>
+                              {processedTags.slice(2).map((tag, idx) => (
+                                <span
+                                  key={idx + 2}
+                                  className="px-2 py-0.5 bg-blue-50 text-blue-600 text-xs rounded hidden group-hover:inline-block"
+                                >
+                                  {tag}
+                                </span>
+                              ))}
+                              <span className="px-2 py-0.5 bg-muted text-muted-foreground text-xs rounded cursor-pointer group-hover:hidden">
+                                +{processedTags.length - 2}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   {/* Difficulty */}

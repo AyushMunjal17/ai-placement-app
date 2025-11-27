@@ -258,7 +258,8 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
       hiddenTestCases,
       timeLimit,
       memoryLimit,
-      supportedLanguages
+      supportedLanguages,
+      codeTemplates
     } = req.body;
 
     // Validation
@@ -306,6 +307,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
       timeLimit: timeLimit || 2,
       memoryLimit: memoryLimit || 256,
       supportedLanguages: supportedLanguages || ['c', 'cpp', 'java', 'python'],
+      codeTemplates: codeTemplates || {},
       publishedBy: req.user._id,
       publisherName: `${req.user.firstName} ${req.user.lastName}`,
       isPublic: true,

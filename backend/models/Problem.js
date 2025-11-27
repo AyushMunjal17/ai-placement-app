@@ -187,7 +187,30 @@ const problemSchema = new mongoose.Schema({
     type: String,
     enum: ['c', 'cpp', 'java', 'python'],
     default: ['c', 'cpp', 'java', 'python']
-  }]
+  }],
+  // Optional language-specific code templates (function signature + harness)
+  codeTemplates: {
+    python: {
+      type: String,
+      default: ''
+    },
+    cpp: {
+      type: String,
+      default: ''
+    },
+    java: {
+      type: String,
+      default: ''
+    },
+    javascript: {
+      type: String,
+      default: ''
+    },
+    c: {
+      type: String,
+      default: ''
+    }
+  }
 }, {
   timestamps: true
 });
