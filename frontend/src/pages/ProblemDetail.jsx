@@ -133,6 +133,52 @@ const ProblemDetail = () => {
     Hard: 'text-red-600 bg-red-50 border-red-200'
   }
 
+  // Handle wheel events to allow page scrolling when in editor area
+  useEffect(() => {
+    const handleWheel = (e) => {
+      // Check if the event is from the editor area
+      const target = e.target
+      const editorContainer = target.closest('.monaco-editor')
+      
+      if (editorContainer) {
+        const scrollableElement = editorContainer.querySelector('.monaco-scrollable-element')
+        if (scrollableElement) {
+          const { scrollTop, scrollHeight, clientHeight } = scrollableElement
+          const isAtTop = scrollTop <= 0
+          const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1
+          
+          // Always allow some page scroll when scrolling in editor area
+          // Find the main scrollable container (the one with overflow: auto)
+          const mainContainer = Array.from(document.querySelectorAll('*')).find(el => {
+            const style = window.getComputedStyle(el)
+            return style.overflow === 'auto' || style.overflowY === 'auto'
+          })
+          
+          if (mainContainer) {
+            // If at boundaries, allow full page scroll
+            if ((isAtTop && e.deltaY < 0) || (isAtBottom && e.deltaY > 0)) {
+              mainContainer.scrollBy({ top: e.deltaY, behavior: 'auto' })
+            } else {
+              // When not at boundaries, also allow partial page scroll
+              mainContainer.scrollBy({ top: e.deltaY * 0.3, behavior: 'auto' })
+            }
+          } else {
+            // Fallback: scroll window
+            if ((isAtTop && e.deltaY < 0) || (isAtBottom && e.deltaY > 0)) {
+              window.scrollBy({ top: e.deltaY, behavior: 'auto' })
+            } else {
+              window.scrollBy({ top: e.deltaY * 0.3, behavior: 'auto' })
+            }
+          }
+        }
+      }
+    }
+
+    // Use capture phase to catch events
+    document.addEventListener('wheel', handleWheel, { passive: true, capture: true })
+    return () => document.removeEventListener('wheel', handleWheel, { capture: true })
+  }, [])
+
   useEffect(() => {
     fetchProblem()
     fetchSubmissions()
@@ -458,9 +504,9 @@ const ProblemDetail = () => {
   }
 
   return (
-    <div className="h-screen flex flex-col">
+    <div className="flex flex-col" style={{ height: '100vh', overflow: 'auto' }}>
       {/* Header */}
-      <div className="border-b bg-background px-4 py-2">
+      <div className="border-b bg-background px-4 py-2 flex-shrink-0">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Button 
@@ -549,9 +595,9 @@ const ProblemDetail = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Left Panel - Problem Description (Sticky) */}
-        <div className="w-1/2 border-r flex flex-col overflow-hidden">
+      <div className="flex flex-1" style={{ minHeight: 'calc(100vh - 60px)' }}>
+        {/* Left Panel - Problem Description */}
+        <div className="w-1/2 border-r flex flex-col">
           {/* Tabs */}
           <div className="border-b">
             <div className="flex">
@@ -579,7 +625,7 @@ const ProblemDetail = () => {
           </div>
 
           {/* Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1">
             {activeTab === 'description' && (
               <div className="p-6">
                 {/* Run Results Panel - shown above problem statement */}
@@ -936,7 +982,7 @@ const ProblemDetail = () => {
         {/* Right Panel - Code Editor */}
         <div className="w-1/2 flex flex-col">
           <Editor
-            height="100%"
+            height="calc(100vh - 60px)"
             language={language === 'cpp' ? 'cpp' : language}
             theme={theme}
             value={code}
@@ -953,7 +999,8 @@ const ProblemDetail = () => {
               scrollbar: {
                 vertical: 'auto',
                 horizontal: 'auto'
-              }
+              },
+              mouseWheelZoom: false
             }}
           />
 
