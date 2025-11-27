@@ -46,12 +46,43 @@ const Problems = () => {
   }, [currentPage, selectedDifficulty, searchTerm, selectedCompany, selectedTag])
 
   useEffect(() => {
+    // Helper function to strip HTML tags
+    const stripHtml = (str) => {
+      if (!str) return ''
+      return String(str).replace(/<[^>]*>/g, '').trim()
+    }
+    
     // Extract unique companies and tags from problems
     const companies = new Set()
     const tags = new Set()
     problems.forEach(problem => {
-      problem.companyTags?.forEach(c => companies.add(c))
-      problem.tags?.forEach(t => tags.add(t))
+      // Process company tags - handle both array and string formats
+      if (Array.isArray(problem.companyTags)) {
+        problem.companyTags.forEach(c => {
+          const cleaned = stripHtml(c)
+          if (cleaned) companies.add(cleaned)
+        })
+      } else if (problem.companyTags) {
+        const companiesStr = stripHtml(problem.companyTags)
+        companiesStr.split(',').forEach(c => {
+          const cleaned = c.trim()
+          if (cleaned) companies.add(cleaned)
+        })
+      }
+      
+      // Process tags - handle both array and string formats
+      if (Array.isArray(problem.tags)) {
+        problem.tags.forEach(t => {
+          const cleaned = stripHtml(t)
+          if (cleaned) tags.add(cleaned)
+        })
+      } else if (problem.tags) {
+        const tagsStr = stripHtml(problem.tags)
+        tagsStr.split(',').forEach(t => {
+          const cleaned = t.trim()
+          if (cleaned) tags.add(cleaned)
+        })
+      }
     })
     setAllCompanies(Array.from(companies).sort())
     setAllTags(Array.from(tags).sort())
@@ -225,7 +256,7 @@ const Problems = () => {
               )}
               {selectedCompany && (
                 <span className="px-2 py-1 text-xs bg-green-100 text-green-700 rounded flex items-center gap-1">
-                  {selectedCompany}
+                  {selectedCompany.replace(/<[^>]*>/g, '')}
                   <X 
                     className="h-3 w-3 cursor-pointer" 
                     onClick={() => setSelectedCompany('')}
@@ -234,7 +265,7 @@ const Problems = () => {
               )}
               {selectedTag && (
                 <span className="px-2 py-1 text-xs bg-purple-100 text-purple-700 rounded flex items-center gap-1">
-                  {selectedTag}
+                  {selectedTag.replace(/<[^>]*>/g, '')}
                   <X 
                     className="h-3 w-3 cursor-pointer" 
                     onClick={() => setSelectedTag('')}
