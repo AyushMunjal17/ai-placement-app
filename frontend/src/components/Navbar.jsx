@@ -1,5 +1,6 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useTheme } from '../contexts/ThemeContext'
 import { Button } from './ui/button'
 import { 
   Code, 
@@ -10,11 +11,14 @@ import {
   LayoutDashboard,
   Brain,
   FileText,
-  Shield
+  Shield,
+  Sun,
+  Moon
 } from 'lucide-react'
 
 const Navbar = () => {
   const { user, logout, isAuthenticated } = useAuth()
+  const { theme, toggleTheme, isDark } = useTheme()
   const navigate = useNavigate()
 
   const handleLogout = () => {
@@ -108,6 +112,27 @@ const Navbar = () => {
 
           {/* User Actions */}
           <div className="flex items-center space-x-4">
+            {/* Theme Toggle */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={toggleTheme}
+              className="flex items-center gap-2"
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDark ? (
+                <>
+                  <Sun className="h-4 w-4" />
+                  <span className="hidden sm:inline">Light</span>
+                </>
+              ) : (
+                <>
+                  <Moon className="h-4 w-4" />
+                  <span className="hidden sm:inline">Dark</span>
+                </>
+              )}
+            </Button>
+
             {isAuthenticated ? (
               <div className="flex items-center space-x-3">
                 <div className="flex items-center space-x-2">

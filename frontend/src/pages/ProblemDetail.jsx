@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import Editor from '@monaco-editor/react'
+import { useTheme } from '../contexts/ThemeContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
 import { Select } from '../components/ui/select'
@@ -86,7 +87,13 @@ const ProblemDetail = () => {
   // Code editor state
   const [code, setCode] = useState('')
   const [language, setLanguage] = useState('python')
-  const [theme, setTheme] = useState('vs-dark')
+  const { isDark } = useTheme()
+  const [editorTheme, setEditorTheme] = useState(isDark ? 'vs-dark' : 'light')
+  
+  // Sync editor theme with app theme
+  useEffect(() => {
+    setEditorTheme(isDark ? 'vs-dark' : 'light')
+  }, [isDark])
   
   // Execution state
   const [isRunning, setIsRunning] = useState(false)
@@ -543,7 +550,7 @@ const ProblemDetail = () => {
                 ({problem.supportedLanguages.length} language{problem.supportedLanguages.length !== 1 ? 's' : ''} available)
               </span>
             )}
-            <Select value={theme} onChange={(e) => setTheme(e.target.value)} className="w-[120px]">
+            <Select value={editorTheme} onChange={(e) => setEditorTheme(e.target.value)} className="w-[120px]">
               <option value="vs-dark">Dark</option>
               <option value="light">Light</option>
             </Select>
@@ -984,7 +991,7 @@ const ProblemDetail = () => {
           <Editor
             height="calc(100vh - 60px)"
             language={language === 'cpp' ? 'cpp' : language}
-            theme={theme}
+            theme={editorTheme}
             value={code}
             onChange={(value) => setCode(value || '')}
             options={{

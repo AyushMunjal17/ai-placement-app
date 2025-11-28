@@ -207,7 +207,7 @@ const Dashboard = () => {
                           to={`/problems/${submission.problemId}`}
                           className="font-medium hover:text-blue-600"
                         >
-                          {submission.problemTitle}
+                          {submission.problemTitle ? submission.problemTitle.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
                         </Link>
                       </div>
                       <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
