@@ -64,29 +64,29 @@ const Dashboard = () => {
       title: "Problems Solved",
       value: stats.problemsSolved,
       icon: Trophy,
-      color: "text-green-600",
-      bgColor: "bg-green-50"
+      color: "text-green-600 dark:text-green-400",
+      bgColor: "bg-green-50 dark:bg-green-900/20"
     },
     {
       title: "Total Submissions",
       value: stats.totalSubmissions,
       icon: Code,
-      color: "text-blue-600",
-      bgColor: "bg-blue-50"
+      color: "text-blue-600 dark:text-blue-400",
+      bgColor: "bg-blue-50 dark:bg-blue-900/20"
     },
     {
       title: "Accepted",
       value: stats.acceptedSubmissions,
       icon: CheckCircle,
-      color: "text-green-600",
-      bgColor: "bg-green-50"
+      color: "text-green-600 dark:text-green-400",
+      bgColor: "bg-green-50 dark:bg-green-900/20"
     },
     {
       title: "Acceptance Rate",
       value: `${stats.acceptanceRate}%`,
       icon: TrendingUp,
-      color: "text-purple-600",
-      bgColor: "bg-purple-50"
+      color: "text-purple-600 dark:text-purple-400",
+      bgColor: "bg-purple-50 dark:bg-purple-900/20"
     }
   ]
 
@@ -191,8 +191,8 @@ const Dashboard = () => {
                   key={submission._id} 
                   className={`p-4 border rounded-lg ${
                     submission.status === 'Accepted' 
-                      ? 'border-green-200 bg-green-50/50' 
-                      : 'border-red-200 bg-red-50/50'
+                      ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20' 
+                      : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/20'
                   }`}
                 >
                   <div className="flex items-center justify-between">
@@ -224,8 +224,8 @@ const Dashboard = () => {
                     </div>
                     <span className={`px-3 py-1 rounded text-sm font-medium ${
                       submission.status === 'Accepted'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-red-100 text-red-700'
+                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
                     }`}>
                       {submission.status}
                     </span>
@@ -285,37 +285,43 @@ const Dashboard = () => {
           </CardHeader>
           <CardContent className="space-y-3">
             <div className={`flex items-center gap-3 p-3 rounded-lg ${
-              stats.problemsSolved >= 1 ? 'bg-green-50 border border-green-200' : 'bg-gray-50 border border-gray-200'
+              stats.problemsSolved >= 1 
+                ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
+                : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
             }`}>
               <Trophy className={`h-6 w-6 ${
-                stats.problemsSolved >= 1 ? 'text-green-600' : 'text-gray-400'
+                stats.problemsSolved >= 1 ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'
               }`} />
               <div>
-                <p className="font-medium">First Problem</p>
+                <p className="font-medium text-foreground">First Problem</p>
                 <p className="text-xs text-muted-foreground">Solve your first problem</p>
               </div>
             </div>
             
             <div className={`flex items-center gap-3 p-3 rounded-lg ${
-              stats.problemsSolved >= 10 ? 'bg-blue-50 border border-blue-200' : 'bg-gray-50 border border-gray-200'
+              stats.problemsSolved >= 10 
+                ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' 
+                : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
             }`}>
               <Trophy className={`h-6 w-6 ${
-                stats.problemsSolved >= 10 ? 'text-blue-600' : 'text-gray-400'
+                stats.problemsSolved >= 10 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
               }`} />
               <div>
-                <p className="font-medium">Problem Solver</p>
+                <p className="font-medium text-foreground">Problem Solver</p>
                 <p className="text-xs text-muted-foreground">Solve 10 problems</p>
               </div>
             </div>
             
             <div className={`flex items-center gap-3 p-3 rounded-lg ${
-              stats.acceptanceRate >= 50 ? 'bg-purple-50 border border-purple-200' : 'bg-gray-50 border border-gray-200'
+              stats.acceptanceRate >= 50 
+                ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800' 
+                : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
             }`}>
               <Trophy className={`h-6 w-6 ${
-                stats.acceptanceRate >= 50 ? 'text-purple-600' : 'text-gray-400'
+                stats.acceptanceRate >= 50 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400 dark:text-gray-500'
               }`} />
               <div>
-                <p className="font-medium">Consistent Performer</p>
+                <p className="font-medium text-foreground">Consistent Performer</p>
                 <p className="text-xs text-muted-foreground">50%+ acceptance rate</p>
               </div>
             </div>
