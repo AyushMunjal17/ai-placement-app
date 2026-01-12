@@ -13,6 +13,12 @@ console.log('🔑 MONGO_URI exists:', !!process.env.MONGO_URI);
 console.log('🔑 JWT_SECRET exists:', !!process.env.JWT_SECRET);
 console.log('🔑 JUDGE0_API_KEY exists:', !!process.env.JUDGE0_API_KEY);
 console.log('🔑 JUDGE0_API_KEY value:', process.env.JUDGE0_API_KEY ? 'LOADED' : 'MISSING');
+console.log('📧 EMAIL_USER exists:', !!process.env.EMAIL_USER);
+console.log('📧 EMAIL_PASSWORD exists:', !!process.env.EMAIL_PASSWORD);
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+  console.warn('⚠️  WARNING: Email service is not configured! OTP emails will not be sent.');
+  console.warn('   Please set EMAIL_USER, EMAIL_PASSWORD, and EMAIL_FROM in your .env file.');
+}
 
 // Import routes
 const authRoutes = require('./routes/auth');

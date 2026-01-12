@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../co
 import { Mail, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 
 const VerifyEmail = () => {
-  const { user } = useAuth()
+  const { user, refreshUser } = useAuth()
   const navigate = useNavigate()
   const [otp, setOtp] = useState(['', '', '', '', '', ''])
   const [loading, setLoading] = useState(false)
@@ -17,6 +17,7 @@ const VerifyEmail = () => {
   const [success, setSuccess] = useState('')
   const [countdown, setCountdown] = useState(0)
   const [hasSentInitialOTP, setHasSentInitialOTP] = useState(false)
+  const [emailNotSent, setEmailNotSent] = useState(false)
 
   useEffect(() => {
     // Redirect if user is not logged in or email is already verified
@@ -27,6 +28,14 @@ const VerifyEmail = () => {
     if (user.isEmailVerified) {
       navigate('/dashboard')
       return
+    }
+    
+    // Check if email was sent during registration by checking localStorage
+    const registrationEmailSent = localStorage.getItem('registrationEmailSent')
+    if (registrationEmailSent === 'false') {
+      setEmailNotSent(true)
+      // Clear the flag
+      localStorage.removeItem('registrationEmailSent')
     }
   }, [user, navigate])
 
@@ -126,9 +135,11 @@ const VerifyEmail = () => {
       setSuccess('Email verified successfully! Redirecting...')
       
       // Update user in context
+      await refreshUser()
+      
+      // Redirect to dashboard
       setTimeout(() => {
         navigate('/dashboard')
-        window.location.reload() // Refresh to update user state
       }, 1500)
     } catch (error) {
       setError(error.response?.data?.message || 'Invalid OTP. Please try again.')
@@ -153,7 +164,14 @@ const VerifyEmail = () => {
           </div>
           <CardTitle className="text-2xl text-center">Verify Your Email</CardTitle>
           <CardDescription className="text-center">
-            We've sent a 6-digit OTP to <strong>{user.email || 'your email'}</strong>
+            {emailNotSent 
+              ? 'Please click "Resend OTP" below to receive your verification code'
+              : (
+                <>
+                  We've sent a 6-digit OTP to <strong>{user.email || 'your email'}</strong>
+                </>
+              )
+            }
           </CardDescription>
         </CardHeader>
         
@@ -162,6 +180,13 @@ const VerifyEmail = () => {
             <div className="flex items-center gap-2 p-3 text-sm text-red-600 bg-red-50 border border-red-200 rounded-md mb-4">
               <AlertCircle className="h-4 w-4" />
               {error}
+            </div>
+          )}
+
+          {emailNotSent && (
+            <div className="flex items-center gap-2 p-3 text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-md mb-4">
+              <AlertCircle className="h-4 w-4" />
+              Email service is not configured. Please click "Resend OTP" below to receive your verification code.
             </div>
           )}
 

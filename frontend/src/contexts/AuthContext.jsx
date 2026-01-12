@@ -78,7 +78,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.post('/auth/register', userData)
       
-      const { token: newToken, user: newUser, requiresApproval, requiresEmailVerification, message } = response.data
+      const { token: newToken, user: newUser, requiresApproval, requiresEmailVerification, emailSent, message } = response.data
       
       setToken(newToken)
       setUser(newUser)
@@ -89,6 +89,7 @@ export const AuthProvider = ({ children }) => {
         user: newUser, 
         requiresApproval: requiresApproval || false,
         requiresEmailVerification: requiresEmailVerification || false,
+        emailSent: emailSent !== false, // Default to true if not specified
         message: message || 'Registration successful'
       }
     } catch (error) {
@@ -115,6 +116,20 @@ export const AuthProvider = ({ children }) => {
     }
   }
 
+  const refreshUser = async () => {
+    if (token) {
+      try {
+        const response = await axios.post('/auth/verify-token')
+        setUser(response.data.user)
+        return { success: true, user: response.data.user }
+      } catch (error) {
+        console.error('Failed to refresh user:', error)
+        return { success: false }
+      }
+    }
+    return { success: false }
+  }
+
   const value = {
     user,
     token,
@@ -123,6 +138,7 @@ export const AuthProvider = ({ children }) => {
     register,
     logout,
     updateProfile,
+    refreshUser,
     isAuthenticated: !!user
   }
 

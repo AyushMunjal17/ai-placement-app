@@ -2,28 +2,46 @@ const nodemailer = require('nodemailer');
 
 // Create transporter - using Gmail as default (can be configured via env)
 const createTransporter = () => {
-  // For production, use environment variables
-  // For development, you can use Gmail with app password or other SMTP services
-  const transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE || 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD // Use app password for Gmail
+  // Check if email is configured
+  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
+    console.error('❌ Email configuration missing! EMAIL_USER and EMAIL_PASSWORD must be set in .env file');
+    return null;
+  }
+
+  try {
+    let transporter;
+    
+    // Check if SMTP configuration is provided (alternative method)
+    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+      // Use SMTP directly (more reliable for Gmail)
+      console.log('📧 Using SMTP configuration');
+      transporter = nodemailer.createTransport({
+        host: process.env.SMTP_HOST,
+        port: parseInt(process.env.SMTP_PORT) || 587,
+        secure: false, // true for 465, false for other ports
+        auth: {
+          user: process.env.SMTP_USER,
+          pass: process.env.SMTP_PASSWORD
+        }
+      });
+    } else {
+      // Use service configuration (Gmail, etc.)
+      console.log('📧 Using service configuration:', process.env.EMAIL_SERVICE || 'gmail');
+      transporter = nodemailer.createTransport({
+        service: process.env.EMAIL_SERVICE || 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASSWORD // Use app password for Gmail
+        }
+      });
     }
-  });
 
-  // Alternative: Use SMTP directly
-  // const transporter = nodemailer.createTransport({
-  //   host: process.env.SMTP_HOST,
-  //   port: process.env.SMTP_PORT || 587,
-  //   secure: false,
-  //   auth: {
-  //     user: process.env.SMTP_USER,
-  //     pass: process.env.SMTP_PASSWORD
-  //   }
-  // });
-
-  return transporter;
+    return transporter;
+  } catch (error) {
+    console.error('❌ Failed to create email transporter:', error);
+    console.error('Error details:', error.message);
+    return null;
+  }
 };
 
 // Generate 6-digit OTP
@@ -35,6 +53,14 @@ const generateOTP = () => {
 const sendOTPEmail = async (email, otp, firstName) => {
   try {
     const transporter = createTransporter();
+    
+    if (!transporter) {
+      console.error('❌ Cannot send email: Email transporter not configured');
+      return { 
+        success: false, 
+        error: 'Email service not configured. Please set EMAIL_USER and EMAIL_PASSWORD in backend .env file.' 
+      };
+    }
 
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
@@ -66,12 +92,31 @@ const sendOTPEmail = async (email, otp, firstName) => {
       `
     };
 
+    // Verify connection before sending
+    await transporter.verify();
+    console.log('✅ Email server connection verified');
+
     const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully:', info.messageId);
+    console.log('✅ Email sent successfully:', info.messageId);
+    console.log('📧 Email sent to:', email);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Error sending email:', error);
-    return { success: false, error: error.message };
+    console.error('❌ Error sending email:', error);
+    console.error('Error code:', error.code);
+    console.error('Error command:', error.command);
+    console.error('Error response:', error.response);
+    
+    // Provide more helpful error messages
+    let errorMessage = error.message;
+    if (error.code === 'EAUTH') {
+      errorMessage = 'Authentication failed. Please check your EMAIL_USER and EMAIL_PASSWORD in .env file. For Gmail, make sure you\'re using an App Password, not your regular password.';
+    } else if (error.code === 'ECONNECTION') {
+      errorMessage = 'Connection failed. Please check your internet connection and email service configuration.';
+    } else if (error.response) {
+      errorMessage = `Email service error: ${error.response}`;
+    }
+    
+    return { success: false, error: errorMessage, details: error.code };
   }
 };
 
@@ -79,6 +124,14 @@ const sendOTPEmail = async (email, otp, firstName) => {
 const sendPasswordResetOTP = async (email, otp, firstName) => {
   try {
     const transporter = createTransporter();
+    
+    if (!transporter) {
+      console.error('❌ Cannot send email: Email transporter not configured');
+      return { 
+        success: false, 
+        error: 'Email service not configured. Please set EMAIL_USER and EMAIL_PASSWORD in backend .env file.' 
+      };
+    }
 
     const mailOptions = {
       from: process.env.EMAIL_FROM || process.env.EMAIL_USER,
@@ -113,12 +166,31 @@ const sendPasswordResetOTP = async (email, otp, firstName) => {
       `
     };
 
+    // Verify connection before sending
+    await transporter.verify();
+    console.log('✅ Email server connection verified');
+
     const info = await transporter.sendMail(mailOptions);
-    console.log('Password reset email sent successfully:', info.messageId);
+    console.log('✅ Password reset email sent successfully:', info.messageId);
+    console.log('📧 Email sent to:', email);
     return { success: true, messageId: info.messageId };
   } catch (error) {
-    console.error('Error sending password reset email:', error);
-    return { success: false, error: error.message };
+    console.error('❌ Error sending password reset email:', error);
+    console.error('Error code:', error.code);
+    console.error('Error command:', error.command);
+    console.error('Error response:', error.response);
+    
+    // Provide more helpful error messages
+    let errorMessage = error.message;
+    if (error.code === 'EAUTH') {
+      errorMessage = 'Authentication failed. Please check your EMAIL_USER and EMAIL_PASSWORD in .env file. For Gmail, make sure you\'re using an App Password, not your regular password.';
+    } else if (error.code === 'ECONNECTION') {
+      errorMessage = 'Connection failed. Please check your internet connection and email service configuration.';
+    } else if (error.response) {
+      errorMessage = `Email service error: ${error.response}`;
+    }
+    
+    return { success: false, error: errorMessage, details: error.code };
   }
 };
 

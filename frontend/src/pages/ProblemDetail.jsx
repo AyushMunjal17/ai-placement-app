@@ -22,7 +22,9 @@ import {
   HardDrive,
   Terminal,
   Sparkles,
-  X
+  X,
+  Tag,
+  Building2
 } from 'lucide-react'
 
 // Markers used inside language-specific templates to define the student-editable region
@@ -115,6 +117,15 @@ const ProblemDetail = () => {
   const [aiDebugging, setAiDebugging] = useState(false)
   const [aiResponse, setAiResponse] = useState('')
   const [showAiModal, setShowAiModal] = useState(false)
+  
+  // Tags and Company modal state
+  const [showTagsModal, setShowTagsModal] = useState(false)
+  const [showCompanyModal, setShowCompanyModal] = useState(false)
+  
+  // Suggested problems state
+  const [suggestedProblems, setSuggestedProblems] = useState([])
+  const [showSuggestionsModal, setShowSuggestionsModal] = useState(false)
+  const [loadingSuggestions, setLoadingSuggestions] = useState(false)
 
   // Language configurations
   const allLanguages = {
@@ -259,6 +270,73 @@ const ProblemDetail = () => {
       console.error('Fetch submissions error:', err)
     } finally {
       setLoadingSubmissions(false)
+    }
+  }
+
+  const fetchSuggestedProblems = async () => {
+    if (!problem) return
+    
+    try {
+      setLoadingSuggestions(true)
+      
+      // Get current problem tags and difficulty
+      const stripHtml = (str) => {
+        if (!str) return ''
+        return String(str).replace(/<[^>]*>/g, '').trim()
+      }
+      
+      let currentTags = []
+      if (Array.isArray(problem.tags)) {
+        currentTags = problem.tags.map(tag => stripHtml(tag)).filter(tag => tag)
+      } else if (problem.tags) {
+        const tagsStr = stripHtml(problem.tags)
+        currentTags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
+      }
+      
+      // Fetch all problems
+      const response = await axios.get('/problems')
+      const allProblems = response.data.problems || []
+      
+      // Filter out current problem and find similar ones
+      const similarProblems = allProblems
+        .filter(p => p._id !== id) // Exclude current problem
+        .map(p => {
+          let score = 0
+          let pTags = []
+          
+          if (Array.isArray(p.tags)) {
+            pTags = p.tags.map(tag => stripHtml(tag)).filter(tag => tag)
+          } else if (p.tags) {
+            const tagsStr = stripHtml(p.tags)
+            pTags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
+          }
+          
+          // Score based on matching tags
+          const commonTags = currentTags.filter(tag => pTags.includes(tag))
+          score += commonTags.length * 10
+          
+          // Bonus for same difficulty
+          if (p.difficulty === problem.difficulty) {
+            score += 5
+          }
+          
+          return { problem: p, score, commonTags }
+        })
+        .filter(item => item.score > 0) // Only include problems with some similarity
+        .sort((a, b) => b.score - a.score) // Sort by score
+        .slice(0, 5) // Top 5 suggestions
+        .map(item => item.problem)
+      
+      setSuggestedProblems(similarProblems)
+      
+      // Show modal if there are suggestions
+      if (similarProblems.length > 0) {
+        setShowSuggestionsModal(true)
+      }
+    } catch (err) {
+      console.error('Fetch suggested problems error:', err)
+    } finally {
+      setLoadingSuggestions(false)
     }
   }
 
@@ -408,6 +486,9 @@ const ProblemDetail = () => {
         setShowSubmitPanel(true)
         // Refresh submissions after successful submit
         fetchSubmissions()
+        
+        // Fetch suggested problems after submission
+        fetchSuggestedProblems()
       } else {
         // Fallback
         setOutput(response.data.message || 'Submission completed')
@@ -555,6 +636,55 @@ const ProblemDetail = () => {
               <option value="light">Light</option>
             </Select>
             <div className="flex gap-2 ml-2">
+              {(() => {
+                const stripHtml = (str) => {
+                  if (!str) return ''
+                  return String(str).replace(/<[^>]*>/g, '').trim()
+                }
+                
+                let processedTags = []
+                if (Array.isArray(problem?.tags)) {
+                  processedTags = problem.tags.map(tag => stripHtml(tag)).filter(tag => tag)
+                } else if (problem?.tags) {
+                  const tagsStr = stripHtml(problem.tags)
+                  processedTags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
+                }
+                
+                let processedCompanyTags = []
+                if (Array.isArray(problem?.companyTags)) {
+                  processedCompanyTags = problem.companyTags.map(company => stripHtml(company)).filter(company => company)
+                } else if (problem?.companyTags) {
+                  const companiesStr = stripHtml(problem.companyTags)
+                  processedCompanyTags = companiesStr.split(',').map(c => c.trim()).filter(c => c)
+                }
+                
+                return (
+                  <>
+                    {processedTags.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowTagsModal(true)}
+                        className="flex items-center gap-1.5 border-blue-300 text-blue-600 hover:bg-blue-50"
+                      >
+                        <Tag className="h-4 w-4" />
+                        Tags
+                      </Button>
+                    )}
+                    {processedCompanyTags.length > 0 && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setShowCompanyModal(true)}
+                        className="flex items-center gap-1.5 border-green-300 text-green-600 hover:bg-green-50"
+                      >
+                        <Building2 className="h-4 w-4" />
+                        Companies
+                      </Button>
+                    )}
+                  </>
+                )
+              })()}
               <Button
                 variant="outline"
                 size="sm"
@@ -800,57 +930,7 @@ const ProblemDetail = () => {
                 )}
 
                 <div className="space-y-6">
-                  {/* Tags */}
-                  {(() => {
-                    // Helper function to strip HTML and extract tags
-                    const stripHtml = (str) => {
-                      if (!str) return ''
-                      return String(str).replace(/<[^>]*>/g, '').trim()
-                    }
-                    
-                    // Process tags - handle both array and string formats
-                    let processedTags = []
-                    if (Array.isArray(problem?.tags)) {
-                      processedTags = problem.tags
-                        .map(tag => stripHtml(tag))
-                        .filter(tag => tag)
-                    } else if (problem?.tags) {
-                      // If tags is a string, split by comma and strip HTML
-                      const tagsStr = stripHtml(problem.tags)
-                      processedTags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
-                    }
-                    
-                    // Process company tags - handle both array and string formats
-                    let processedCompanyTags = []
-                    if (Array.isArray(problem?.companyTags)) {
-                      processedCompanyTags = problem.companyTags
-                        .map(company => stripHtml(company))
-                        .filter(company => company)
-                    } else if (problem?.companyTags) {
-                      // If companyTags is a string, split by comma and strip HTML
-                      const companiesStr = stripHtml(problem.companyTags)
-                      processedCompanyTags = companiesStr.split(',').map(c => c.trim()).filter(c => c)
-                    }
-                    
-                    if (processedTags.length === 0 && processedCompanyTags.length === 0) {
-                      return null
-                    }
-                    
-                    return (
-                      <div className="flex flex-wrap gap-2">
-                        {processedTags.map((tag, index) => (
-                          <span key={index} className="px-2 py-1 bg-blue-50 text-blue-600 text-xs rounded border border-blue-200">
-                            {tag}
-                          </span>
-                        ))}
-                        {processedCompanyTags.map((company, index) => (
-                          <span key={index} className="px-2 py-1 bg-green-50 text-green-600 text-xs rounded border border-green-200 font-medium">
-                            {company}
-                          </span>
-                        ))}
-                      </div>
-                    )
-                  })()}
+                  {/* Tags and Companies removed from here - now in modal buttons */}
 
                   <div>
                     <h3 className="text-base font-semibold mb-2">Problem Description</h3>
@@ -878,10 +958,34 @@ const ProblemDetail = () => {
 
                   <div>
                     <h3 className="text-base font-semibold mb-2">Constraints</h3>
-                    <div
-                      className="text-sm text-muted-foreground leading-relaxed prose prose-sm max-w-none"
-                      dangerouslySetInnerHTML={{ __html: problem?.constraints || '' }}
-                    />
+                    <div className="text-sm text-muted-foreground leading-relaxed space-y-1">
+                      {(() => {
+                        // Strip HTML and split constraints by common separators
+                        const stripHtml = (str) => {
+                          if (!str) return ''
+                          return String(str).replace(/<[^>]*>/g, '').trim()
+                        }
+                        
+                        const constraintsText = stripHtml(problem?.constraints || '')
+                        // Split by line breaks, semicolons, or bullets, then filter empty
+                        const constraints = constraintsText
+                          .split(/[\n\r;•·]/)
+                          .map(c => c.trim())
+                          .filter(c => c.length > 0)
+                        
+                        if (constraints.length === 0) {
+                          return <div className="text-sm text-muted-foreground">No constraints specified</div>
+                        }
+                        
+                        return (
+                          <ul className="list-disc list-inside space-y-1">
+                            {constraints.map((constraint, index) => (
+                              <li key={index}>{constraint}</li>
+                            ))}
+                          </ul>
+                        )
+                      })()}
+                    </div>
                   </div>
 
                   {problem?.sampleTestCases && problem.sampleTestCases.length > 0 && (
@@ -1045,6 +1149,207 @@ Check browser console for API response details.`}
           )}
         </div>
       </div>
+
+      {/* Tags Modal */}
+      {showTagsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/20 dark:to-blue-800/20">
+              <div className="flex items-center gap-2">
+                <Tag className="h-5 w-5 text-blue-600" />
+                <h3 className="font-semibold text-lg">Problem Tags</h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowTagsModal(false)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex flex-wrap gap-2">
+                {(() => {
+                  const stripHtml = (str) => {
+                    if (!str) return ''
+                    return String(str).replace(/<[^>]*>/g, '').trim()
+                  }
+                  
+                  let processedTags = []
+                  if (Array.isArray(problem?.tags)) {
+                    processedTags = problem.tags.map(tag => stripHtml(tag)).filter(tag => tag)
+                  } else if (problem?.tags) {
+                    const tagsStr = stripHtml(problem.tags)
+                    processedTags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
+                  }
+                  
+                  if (processedTags.length === 0) {
+                    return <p className="text-muted-foreground">No tags available</p>
+                  }
+                  
+                  return processedTags.map((tag, index) => (
+                    <span key={index} className="px-3 py-1.5 bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 text-sm rounded-md border border-blue-200 dark:border-blue-800 font-medium">
+                      {tag}
+                    </span>
+                  ))
+                })()}
+              </div>
+            </div>
+            <div className="p-4 border-t bg-gray-50 dark:bg-gray-900 flex justify-end">
+              <Button onClick={() => setShowTagsModal(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Company Modal */}
+      {showCompanyModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-800/20">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-green-600" />
+                <h3 className="font-semibold text-lg">Companies</h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowCompanyModal(false)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="flex flex-wrap gap-2">
+                {(() => {
+                  const stripHtml = (str) => {
+                    if (!str) return ''
+                    return String(str).replace(/<[^>]*>/g, '').trim()
+                  }
+                  
+                  let processedCompanyTags = []
+                  if (Array.isArray(problem?.companyTags)) {
+                    processedCompanyTags = problem.companyTags.map(company => stripHtml(company)).filter(company => company)
+                  } else if (problem?.companyTags) {
+                    const companiesStr = stripHtml(problem.companyTags)
+                    processedCompanyTags = companiesStr.split(',').map(c => c.trim()).filter(c => c)
+                  }
+                  
+                  if (processedCompanyTags.length === 0) {
+                    return <p className="text-muted-foreground">No companies available</p>
+                  }
+                  
+                  return processedCompanyTags.map((company, index) => (
+                    <span key={index} className="px-3 py-1.5 bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400 text-sm rounded-md border border-green-200 dark:border-green-800 font-medium">
+                      {company}
+                    </span>
+                  ))
+                })()}
+              </div>
+            </div>
+            <div className="p-4 border-t bg-gray-50 dark:bg-gray-900 flex justify-end">
+              <Button onClick={() => setShowCompanyModal(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Suggested Problems Modal */}
+      {showSuggestionsModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-800/20">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-purple-600" />
+                <h3 className="font-semibold text-lg">Suggested Problems</h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSuggestionsModal(false)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {loadingSuggestions ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : suggestedProblems.length === 0 ? (
+                <p className="text-muted-foreground text-center py-8">No similar problems found</p>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground mb-4">
+                    Based on the tags and difficulty of this problem, here are some similar problems you might want to try:
+                  </p>
+                  {suggestedProblems.map((suggestedProblem) => {
+                    const stripHtml = (str) => {
+                      if (!str) return ''
+                      return String(str).replace(/<[^>]*>/g, '').trim()
+                    }
+                    
+                    const title = stripHtml(suggestedProblem.title)
+                    const difficultyColors = {
+                      Easy: 'text-green-600 bg-green-50 border-green-200 dark:bg-green-900/20 dark:border-green-800',
+                      Medium: 'text-yellow-600 bg-yellow-50 border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-800',
+                      Hard: 'text-red-600 bg-red-50 border-red-200 dark:bg-red-900/20 dark:border-red-800'
+                    }
+                    
+                    return (
+                      <div
+                        key={suggestedProblem._id}
+                        className="border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer"
+                        onClick={() => {
+                          setShowSuggestionsModal(false)
+                          navigate(`/problems/${suggestedProblem._id}`)
+                          window.location.reload()
+                        }}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-base mb-2 hover:text-primary">
+                              {title}
+                            </h4>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`px-2 py-0.5 rounded text-xs font-medium border ${difficultyColors[suggestedProblem.difficulty] || ''}`}>
+                                {suggestedProblem.difficulty}
+                              </span>
+                              {suggestedProblem.acceptanceRate !== undefined && (
+                                <span className="text-xs text-muted-foreground">
+                                  Acceptance: {suggestedProblem.acceptanceRate}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setShowSuggestionsModal(false)
+                              navigate(`/problems/${suggestedProblem._id}`)
+                              window.location.reload()
+                            }}
+                          >
+                            Solve
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t bg-gray-50 dark:bg-gray-900 flex justify-end">
+              <Button onClick={() => setShowSuggestionsModal(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AI Help Modal */}
       {showAiModal && (

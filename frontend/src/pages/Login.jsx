@@ -55,7 +55,7 @@ const Login = () => {
         if (result.requiresVerification) {
           navigate('/verify-email')
         } else {
-          setError(result.error)
+        setError(result.error)
         }
       }
     } catch (err) {
@@ -110,9 +110,9 @@ const Login = () => {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium">
-                  Password
-                </label>
+              <label htmlFor="password" className="text-sm font-medium">
+                Password
+              </label>
                 <Link 
                   to="/forgot-password" 
                   className="text-sm text-primary hover:underline"

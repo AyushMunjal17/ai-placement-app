@@ -97,8 +97,18 @@ router.post('/register', async (req, res) => {
     // Send OTP email
     const emailResult = await sendOTPEmail(email, otp, firstName);
     if (!emailResult.success) {
-      console.error('Failed to send OTP email:', emailResult.error);
+      console.error('❌ Failed to send OTP email:', emailResult.error);
+      console.error('Error details:', emailResult.details);
+      // Log detailed error for debugging
+      console.error('Email configuration check:', {
+        hasEmailUser: !!process.env.EMAIL_USER,
+        hasEmailPassword: !!process.env.EMAIL_PASSWORD,
+        emailUser: process.env.EMAIL_USER ? `${process.env.EMAIL_USER.substring(0, 5)}...` : 'NOT SET',
+        emailService: process.env.EMAIL_SERVICE || 'gmail'
+      });
       // Still allow registration, but user needs to request OTP resend
+    } else {
+      console.log('✅ OTP email sent successfully to:', email);
     }
 
     // Generate token

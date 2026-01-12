@@ -1,8 +1,8 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
-const ProtectedRoute = ({ children }) => {
-  const { isAuthenticated, loading } = useAuth()
+const ProtectedRoute = ({ children, requireEmailVerification = true }) => {
+  const { isAuthenticated, user, loading } = useAuth()
   const location = useLocation()
 
   if (loading) {
@@ -16,6 +16,15 @@ const ProtectedRoute = ({ children }) => {
   if (!isAuthenticated) {
     // Redirect to login page with return url
     return <Navigate to="/login" state={{ from: location }} replace />
+  }
+
+  // Check email verification for routes that require it
+  // Allow access to verify-email page even if email isn't verified
+  if (requireEmailVerification && user && !user.isEmailVerified) {
+    // Check if this is the verify-email route itself
+    if (location.pathname !== '/verify-email') {
+      return <Navigate to="/verify-email" replace />
+    }
   }
 
   return children

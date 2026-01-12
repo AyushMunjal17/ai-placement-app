@@ -4,6 +4,7 @@ import axios from 'axios'
 import { useAuth } from '../contexts/AuthContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
 import { Button } from '../components/ui/button'
+import { PieChart, Pie, Cell, ResponsiveContainer, Legend, Tooltip } from 'recharts'
 import { 
   LayoutDashboard, 
   User, 
@@ -16,12 +17,15 @@ import {
   Calendar,
   Target,
   Award,
-  Activity
+  Activity,
+  X
 } from 'lucide-react'
 
 const Dashboard = () => {
   const { user } = useAuth()
   const [submissions, setSubmissions] = useState([])
+  const [allSubmissions, setAllSubmissions] = useState([])
+  const [problems, setProblems] = useState([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalSubmissions: 0,
@@ -29,28 +33,51 @@ const Dashboard = () => {
     problemsSolved: 0,
     recentActivity: []
   })
+  const [calendarData, setCalendarData] = useState({})
+  const [problemTypeData, setProblemTypeData] = useState([])
+  const [languageData, setLanguageData] = useState([])
+  const [selectedMonth, setSelectedMonth] = useState(new Date())
+  const [selectedDate, setSelectedDate] = useState(null)
+  const [selectedDateSubmissions, setSelectedDateSubmissions] = useState([])
+  const [showDateModal, setShowDateModal] = useState(false)
 
   useEffect(() => {
     fetchDashboardData()
+    fetchProblems()
   }, [])
+
+  useEffect(() => {
+    processCalendarData()
+    processChartsData()
+  }, [allSubmissions, problems])
+
+  const fetchProblems = async () => {
+    try {
+      const response = await axios.get('/problems')
+      setProblems(response.data.problems || [])
+    } catch (error) {
+      console.error('Failed to fetch problems:', error)
+    }
+  }
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true)
       const response = await axios.get('/submissions/my-submissions')
-      const allSubmissions = response.data.submissions || []
+      const submissionsData = response.data.submissions || []
       
-      setSubmissions(allSubmissions.slice(0, 10)) // Latest 10
+      setAllSubmissions(submissionsData)
+      setSubmissions(submissionsData.slice(0, 10)) // Latest 10
       
       // Calculate stats
-      const accepted = allSubmissions.filter(s => s.status === 'Accepted').length
-      const uniqueProblems = new Set(allSubmissions.filter(s => s.status === 'Accepted').map(s => s.problemId))
+      const accepted = submissionsData.filter(s => s.status === 'Accepted').length
+      const uniqueProblems = new Set(submissionsData.filter(s => s.status === 'Accepted').map(s => s.problemId))
       
       setStats({
-        totalSubmissions: allSubmissions.length,
+        totalSubmissions: submissionsData.length,
         acceptedSubmissions: accepted,
         problemsSolved: uniqueProblems.size,
-        acceptanceRate: allSubmissions.length > 0 ? Math.round((accepted / allSubmissions.length) * 100) : 0
+        acceptanceRate: submissionsData.length > 0 ? Math.round((accepted / submissionsData.length) * 100) : 0
       })
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error)
@@ -58,6 +85,164 @@ const Dashboard = () => {
       setLoading(false)
     }
   }
+
+  // Process calendar data (LeetCode-style heatmap)
+  const processCalendarData = () => {
+    const calendar = {}
+    
+    allSubmissions.forEach(submission => {
+      const date = new Date(submission.createdAt)
+      const dateStr = date.toISOString().split('T')[0] // YYYY-MM-DD
+      
+      if (!calendar[dateStr]) {
+        calendar[dateStr] = { count: 0, accepted: 0, submissions: [] }
+      }
+      
+      calendar[dateStr].count++
+      calendar[dateStr].submissions.push(submission)
+      if (submission.status === 'Accepted') {
+        calendar[dateStr].accepted++
+      }
+    })
+    
+    setCalendarData(calendar)
+  }
+
+  const handleDateClick = (dayData) => {
+    if (!dayData || dayData.count === 0) return
+    
+    const daySubmissions = dayData.submissions || []
+    // Get unique problems solved (Accepted status) for that day
+    const uniqueProblems = new Map()
+    
+    daySubmissions.forEach(submission => {
+      if (submission.status === 'Accepted' && submission.problemId) {
+        if (!uniqueProblems.has(submission.problemId)) {
+          uniqueProblems.set(submission.problemId, submission)
+        }
+      }
+    })
+    
+    setSelectedDateSubmissions(Array.from(uniqueProblems.values()))
+    setSelectedDate(dayData.date)
+    setShowDateModal(true)
+  }
+
+  // Process chart data for problem types and languages
+  const processChartsData = () => {
+    // Problem types/tags chart
+    const acceptedSubmissions = allSubmissions.filter(s => s.status === 'Accepted')
+    const problemIdToTags = {}
+    
+    problems.forEach(problem => {
+      const stripHtml = (str) => {
+        if (!str) return ''
+        return String(str).replace(/<[^>]*>/g, '').trim()
+      }
+      
+      let tags = []
+      if (Array.isArray(problem.tags)) {
+        tags = problem.tags.map(tag => stripHtml(tag)).filter(tag => tag)
+      } else if (problem.tags) {
+        const tagsStr = stripHtml(problem.tags)
+        tags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
+      }
+      
+      problemIdToTags[problem._id] = tags
+    })
+    
+    const tagCounts = {}
+    acceptedSubmissions.forEach(submission => {
+      const tags = problemIdToTags[submission.problemId] || []
+      tags.forEach(tag => {
+        tagCounts[tag] = (tagCounts[tag] || 0) + 1
+      })
+    })
+    
+    const problemTypeChart = Object.entries(tagCounts)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10) // Top 10
+    
+    setProblemTypeData(problemTypeChart)
+    
+    // Language chart
+    const languageCounts = {}
+    acceptedSubmissions.forEach(submission => {
+      const lang = submission.language || 'unknown'
+      languageCounts[lang] = (languageCounts[lang] || 0) + 1
+    })
+    
+    const languageChart = Object.entries(languageCounts)
+      .map(([name, value]) => ({ name: name.toUpperCase(), value }))
+      .sort((a, b) => b.value - a.value)
+    
+    setLanguageData(languageChart)
+  }
+
+  // Generate calendar grid for current month
+  const generateCalendarGrid = () => {
+    const year = selectedMonth.getFullYear()
+    const month = selectedMonth.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const lastDay = new Date(year, month + 1, 0)
+    const daysInMonth = lastDay.getDate()
+    const startingDayOfWeek = firstDay.getDay()
+    
+    const weeks = []
+    let currentWeek = []
+    
+    // Add empty cells for days before month starts
+    for (let i = 0; i < startingDayOfWeek; i++) {
+      currentWeek.push(null)
+    }
+    
+    // Add days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day)
+      const dateStr = date.toISOString().split('T')[0]
+      const dayData = calendarData[dateStr] || { count: 0, accepted: 0 }
+      
+      currentWeek.push({
+        date,
+        dateStr,
+        day,
+        count: dayData.count,
+        accepted: dayData.accepted,
+        submissions: dayData.submissions || []
+      })
+      
+      if (currentWeek.length === 7) {
+        weeks.push(currentWeek)
+        currentWeek = []
+      }
+    }
+    
+    // Add remaining empty cells
+    while (currentWeek.length < 7 && currentWeek.length > 0) {
+      currentWeek.push(null)
+    }
+    if (currentWeek.length > 0) {
+      weeks.push(currentWeek)
+    }
+    
+    return weeks
+  }
+
+  const getIntensityColor = (count) => {
+    if (count === 0) return 'bg-gray-100 dark:bg-gray-800'
+    if (count === 1) return 'bg-green-200 dark:bg-green-900/30'
+    if (count <= 3) return 'bg-green-400 dark:bg-green-700/50'
+    if (count <= 5) return 'bg-green-600 dark:bg-green-600/70'
+    return 'bg-green-800 dark:bg-green-500'
+  }
+
+  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658', '#ff7c7c', '#8dd1e1', '#d084d0']
+
+  const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 
+    'July', 'August', 'September', 'October', 'November', 'December']
+  
+  const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   const statsCards = [
     {
@@ -237,6 +422,163 @@ const Dashboard = () => {
         </CardContent>
       </Card>
 
+      {/* Monthly Calendar & Charts */}
+      <div className="grid md:grid-cols-3 gap-6">
+        {/* Monthly Submission Calendar */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Submission Calendar
+              </CardTitle>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const prevMonth = new Date(selectedMonth)
+                    prevMonth.setMonth(prevMonth.getMonth() - 1)
+                    setSelectedMonth(prevMonth)
+                  }}
+                >
+                  ← Prev
+                </Button>
+                <span className="px-3 py-1 text-sm font-medium">
+                  {monthNames[selectedMonth.getMonth()]} {selectedMonth.getFullYear()}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const nextMonth = new Date(selectedMonth)
+                    nextMonth.setMonth(nextMonth.getMonth() + 1)
+                    setSelectedMonth(nextMonth)
+                  }}
+                >
+                  Next →
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {/* Week day headers */}
+              <div className="grid grid-cols-7 gap-0.5">
+                {weekDays.map(day => (
+                  <div key={day} className="text-[10px] font-medium text-center text-muted-foreground py-1">
+                    {day}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Calendar grid - smaller cells */}
+              <div className="grid grid-cols-7 gap-0.5">
+                {generateCalendarGrid().flat().map((dayData, index) => (
+                  <div
+                    key={index}
+                    className={`h-8 rounded ${
+                      dayData 
+                        ? getIntensityColor(dayData.count) + ' cursor-pointer hover:ring-1 hover:ring-primary border border-transparent hover:border-primary'
+                        : 'bg-transparent'
+                    } flex items-center justify-center text-[10px] p-0.5`}
+                    onClick={() => handleDateClick(dayData)}
+                    title={dayData ? `${dayData.date.toLocaleDateString()}: ${dayData.count} submission(s), ${dayData.accepted} accepted` : ''}
+                  >
+                    {dayData && dayData.count > 0 && (
+                      <span className="font-medium">{dayData.day}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Legend - compact */}
+              <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground pt-1">
+                <span>Less</span>
+                <div className="flex gap-0.5">
+                  <div className="w-2.5 h-2.5 rounded bg-gray-100 dark:bg-gray-800"></div>
+                  <div className="w-2.5 h-2.5 rounded bg-green-200 dark:bg-green-900/30"></div>
+                  <div className="w-2.5 h-2.5 rounded bg-green-400 dark:bg-green-700/50"></div>
+                  <div className="w-2.5 h-2.5 rounded bg-green-600 dark:bg-green-600/70"></div>
+                  <div className="w-2.5 h-2.5 rounded bg-green-800 dark:bg-green-500"></div>
+                </div>
+                <span>More</span>
+                <span className="text-[9px] text-muted-foreground ml-2">Click a day to see problems solved</span>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Problem Types Pie Chart */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Problem Types Solved</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {problemTypeData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={200}>
+                <PieChart>
+                  <Pie
+                    data={problemTypeData}
+                    cx="50%"
+                    cy="50%"
+                    labelLine={false}
+                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                    outerRadius={70}
+                    fill="#8884d8"
+                    dataKey="value"
+                  >
+                    {problemTypeData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+                No data available
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Languages Pie Chart */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Languages Used</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {languageData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={250}>
+              <PieChart>
+                <Pie
+                  data={languageData}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="value"
+                >
+                  {languageData.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm">
+              No data available
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Progress Tracking */}
       <div className="grid md:grid-cols-2 gap-6">
         <Card>
@@ -328,6 +670,95 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* Date Modal - Show problems solved on selected day */}
+      {showDateModal && selectedDate && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900/20 dark:to-green-800/20">
+              <div className="flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-blue-600" />
+                <div>
+                  <h3 className="font-semibold text-lg">Problems Solved</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedDate.toLocaleDateString('en-US', { 
+                      weekday: 'long', 
+                      year: 'numeric', 
+                      month: 'long', 
+                      day: 'numeric' 
+                    })}
+                  </p>
+                </div>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowDateModal(false)}
+                className="h-8 w-8 p-0"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {selectedDateSubmissions.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Calendar className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No problems were solved on this day</p>
+                  <p className="text-sm mt-2">Check other days for solved problems</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm text-muted-foreground mb-4">
+                    {selectedDateSubmissions.length} problem{selectedDateSubmissions.length !== 1 ? 's' : ''} solved on this day:
+                  </p>
+                  {selectedDateSubmissions.map((submission) => {
+                    const stripHtml = (str) => {
+                      if (!str) return ''
+                      return String(str).replace(/<[^>]*>/g, '').trim()
+                    }
+                    
+                    const title = stripHtml(submission.problemTitle || 'Untitled Problem')
+                    
+                    return (
+                      <div
+                        key={submission._id}
+                        className="border rounded-lg p-4 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <Link
+                              to={`/problems/${submission.problemId}`}
+                              className="font-semibold text-base hover:text-primary block mb-2"
+                            >
+                              {title}
+                            </Link>
+                            <div className="flex items-center gap-3 text-sm text-muted-foreground">
+                              <span className="capitalize">{submission.language}</span>
+                              <span>{submission.executionTime || 0}s</span>
+                              <span className="text-green-600 font-medium">
+                                <CheckCircle className="h-4 w-4 inline mr-1" />
+                                Accepted
+                              </span>
+                            </div>
+                          </div>
+                          <Link to={`/problems/${submission.problemId}`}>
+                            <Button variant="outline" size="sm">
+                              View Problem
+                            </Button>
+                          </Link>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t bg-gray-50 dark:bg-gray-900 flex justify-end">
+              <Button onClick={() => setShowDateModal(false)}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

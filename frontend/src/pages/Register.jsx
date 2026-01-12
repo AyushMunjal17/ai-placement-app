@@ -91,15 +91,26 @@ const Register = () => {
       
       if (result.success) {
         if (result.requiresEmailVerification) {
-          // Redirect to email verification page
-          navigate('/verify-email')
+          // Check if email was sent successfully
+          if (!result.emailSent) {
+            // Store flag in localStorage for VerifyEmail page
+            localStorage.setItem('registrationEmailSent', 'false')
+            setError('Account created, but email service is not configured. Please use the "Resend OTP" button on the verification page.')
+            // Still redirect to verification page where they can request OTP
+            setTimeout(() => navigate('/verify-email'), 2000)
+          } else {
+            // Store flag in localStorage for VerifyEmail page
+            localStorage.setItem('registrationEmailSent', 'true')
+            // Redirect to email verification page
+            navigate('/verify-email')
+          }
         } else if (result.requiresApproval) {
           // Show success message with approval notice
           setError('')
           alert(result.message || 'Your admin account request has been submitted and is pending approval. You can log in as a student until your request is approved.')
           navigate('/dashboard')
         } else {
-          navigate('/dashboard')
+        navigate('/dashboard')
         }
       } else {
         setError(result.error)
