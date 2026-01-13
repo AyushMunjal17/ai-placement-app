@@ -965,8 +965,8 @@ const ProblemDetail = () => {
                         const constraintsText = stripHtml(problem?.constraints || '')
                         // Split by line breaks, semicolons, or bullets, then filter empty
                         const constraints = constraintsText
-                          .split(/[\n\r;•·]/)
-                          .map(c => c.trim())
+                          .split(/[\n\r,;•·]/)
+                          .map(c => c.trim().replace(/^and\s+/i, ''))
                           .filter(c => c.length > 0)
                         
                         if (constraints.length === 0) {
