@@ -40,6 +40,7 @@ const Dashboard = () => {
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedDateSubmissions, setSelectedDateSubmissions] = useState([])
   const [showDateModal, setShowDateModal] = useState(false)
+  const [activeSection, setActiveSection] = useState('overview')
 
   useEffect(() => {
     fetchDashboardData()
@@ -275,6 +276,21 @@ const Dashboard = () => {
     }
   ]
 
+  const dashboardSections = [
+    {
+      id: 'overview',
+      title: 'Overview',
+      description: 'Quick stats and latest submissions',
+      icon: LayoutDashboard
+    },
+    {
+      id: 'insights',
+      title: 'Insights',
+      description: 'Calendar heatmap and charts',
+      icon: TrendingUp
+    }
+  ]
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -285,391 +301,426 @@ const Dashboard = () => {
         </p>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid md:grid-cols-4 gap-6">
-        {statsCards.map((stat, index) => (
-          <Card key={index}>
-            <CardContent className="pt-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">
-                    {stat.title}
-                  </p>
-                  <p className="text-2xl font-bold">{stat.value}</p>
-                </div>
-                <stat.icon className={`h-8 w-8 ${stat.color}`} />
+      {/* Section Switcher */}
+      <div className="flex flex-wrap gap-3">
+        {dashboardSections.map((section) => (
+          <button
+            key={section.id}
+            onClick={() => setActiveSection(section.id)}
+            className={`flex-1 min-w-[220px] rounded-lg border p-4 text-left transition-all ${
+              activeSection === section.id
+                ? 'border-primary bg-primary/5 shadow-sm'
+                : 'border-border hover:bg-muted'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <section.icon className={`h-5 w-5 ${
+                activeSection === section.id ? 'text-primary' : 'text-muted-foreground'
+              }`} />
+              <div>
+                <p className="font-semibold">{section.title}</p>
+                <p className="text-xs text-muted-foreground">{section.description}</p>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </button>
         ))}
       </div>
 
-      {/* User Info */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User className="h-5 w-5" />
-            Profile Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid md:grid-cols-2 gap-4">
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Full Name</p>
-              <p className="text-lg">{user?.firstName} {user?.lastName}</p>
-            </div>
-            <div>
-              <p className="text-sm font-medium text-muted-foreground">Username</p>
-              <p className="text-lg">@{user?.username}</p>
-            </div>
-          </div>
-          <div>
-            <p className="text-sm font-medium text-muted-foreground">Member Since</p>
-            <p className="text-lg">
-              {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', {
-                year: 'numeric',
-                month: 'long',
-                day: 'numeric'
-              }) : 'N/A'}
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Recent Submissions */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="h-5 w-5" />
-                Recent Submissions
-              </CardTitle>
-              <CardDescription>
-                Your latest submission attempts
-              </CardDescription>
-            </div>
-            <Link to="/problems">
-              <Button variant="outline" size="sm">
-                Solve More Problems
-              </Button>
-            </Link>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {loading ? (
-            <div className="text-center py-8 text-muted-foreground">
-              Loading submissions...
-            </div>
-          ) : submissions.length === 0 ? (
-            <div className="text-center py-8">
-              <Code className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-              <p className="text-muted-foreground mb-4">No submissions yet</p>
-              <Link to="/problems">
-                <Button>Start Solving Problems</Button>
-              </Link>
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {submissions.map((submission) => (
-                <div 
-                  key={submission._id} 
-                  className={`p-4 border rounded-lg ${
-                    submission.status === 'Accepted' 
-                      ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20' 
-                      : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/20'
-                  }`}
-                >
+      {activeSection === 'overview' && (
+        <div className="space-y-6">
+          {/* Stats Cards */}
+          <div className="grid md:grid-cols-4 gap-6">
+            {statsCards.map((stat, index) => (
+              <Card key={index}>
+                <CardContent className="pt-6">
                   <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        {submission.status === 'Accepted' ? (
-                          <CheckCircle className="h-5 w-5 text-green-600" />
-                        ) : (
-                          <XCircle className="h-5 w-5 text-red-600" />
-                        )}
-                        <Link 
-                          to={`/problems/${submission.problemId}`}
-                          className="font-medium hover:text-blue-600"
-                        >
-                          {submission.problemTitle ? submission.problemTitle.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
-                        </Link>
-                      </div>
-                      <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {new Date(submission.createdAt).toLocaleDateString()}
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">
+                        {stat.title}
+                      </p>
+                      <p className="text-2xl font-bold">{stat.value}</p>
+                    </div>
+                    <stat.icon className={`h-8 w-8 ${stat.color}`} />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* User Info */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Profile Information
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Full Name</p>
+                  <p className="text-lg">{user?.firstName} {user?.lastName}</p>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-muted-foreground">Username</p>
+                  <p className="text-lg">@{user?.username}</p>
+                </div>
+              </div>
+              <div>
+                <p className="text-sm font-medium text-muted-foreground">Member Since</p>
+                <p className="text-lg">
+                  {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                  }) : 'N/A'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Recent Submissions */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    Recent Submissions
+                  </CardTitle>
+                  <CardDescription>
+                    Your latest submission attempts
+                  </CardDescription>
+                </div>
+                <Link to="/problems">
+                  <Button variant="outline" size="sm">
+                    Solve More Problems
+                  </Button>
+                </Link>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  Loading submissions...
+                </div>
+              ) : submissions.length === 0 ? (
+                <div className="text-center py-8">
+                  <Code className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground mb-4">No submissions yet</p>
+                  <Link to="/problems">
+                    <Button>Start Solving Problems</Button>
+                  </Link>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {submissions.map((submission) => (
+                    <div 
+                      key={submission._id} 
+                      className={`p-4 border rounded-lg ${
+                        submission.status === 'Accepted' 
+                          ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20' 
+                          : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/20'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            {submission.status === 'Accepted' ? (
+                              <CheckCircle className="h-5 w-5 text-green-600" />
+                            ) : (
+                              <XCircle className="h-5 w-5 text-red-600" />
+                            )}
+                            <Link 
+                              to={`/problems/${submission.problemId}`}
+                              className="font-medium hover:text-blue-600"
+                            >
+                              {submission.problemTitle ? submission.problemTitle.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
+                            </Link>
+                          </div>
+                          <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              {new Date(submission.createdAt).toLocaleDateString()}
+                            </span>
+                            <span className="capitalize">{submission.language}</span>
+                            <span>
+                              {submission.passedTestCases || 0}/{submission.totalTestCases || 0} test cases
+                            </span>
+                            <span>{submission.executionTime || 0}s</span>
+                          </div>
+                        </div>
+                        <span className={`px-3 py-1 rounded text-sm font-medium ${
+                          submission.status === 'Accepted'
+                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
+                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                        }`}>
+                          {submission.status}
                         </span>
-                        <span className="capitalize">{submission.language}</span>
-                        <span>
-                          {submission.passedTestCases || 0}/{submission.totalTestCases || 0} test cases
-                        </span>
-                        <span>{submission.executionTime || 0}s</span>
                       </div>
                     </div>
-                    <span className={`px-3 py-1 rounded text-sm font-medium ${
-                      submission.status === 'Accepted'
-                        ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                        : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-                    }`}>
-                      {submission.status}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Monthly Calendar & Charts */}
-      <div className="grid md:grid-cols-3 gap-6">
-        {/* Monthly Submission Calendar */}
-        <Card className="md:col-span-2">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="h-5 w-5" />
-                Submission Calendar
-              </CardTitle>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const prevMonth = new Date(selectedMonth)
-                    prevMonth.setMonth(prevMonth.getMonth() - 1)
-                    setSelectedMonth(prevMonth)
-                  }}
-                >
-                  ← Prev
-                </Button>
-                <span className="px-3 py-1 text-sm font-medium">
-                  {monthNames[selectedMonth.getMonth()]} {selectedMonth.getFullYear()}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    const nextMonth = new Date(selectedMonth)
-                    nextMonth.setMonth(nextMonth.getMonth() + 1)
-                    setSelectedMonth(nextMonth)
-                  }}
-                >
-                  Next →
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-2">
-              {/* Week day headers */}
-              <div className="grid grid-cols-7 gap-0.5">
-                {weekDays.map(day => (
-                  <div key={day} className="text-[10px] font-medium text-center text-muted-foreground py-1">
-                    {day}
-                  </div>
-                ))}
-              </div>
-              
-              {/* Calendar grid - smaller cells */}
-              <div className="grid grid-cols-7 gap-0.5">
-                {generateCalendarGrid().flat().map((dayData, index) => (
-                  <div
-                    key={index}
-                    className={`h-8 rounded ${
-                      dayData 
-                        ? getIntensityColor(dayData.count) + ' cursor-pointer hover:ring-1 hover:ring-primary border border-transparent hover:border-primary'
-                        : 'bg-transparent'
-                    } flex items-center justify-center text-[10px] p-0.5`}
-                    onClick={() => handleDateClick(dayData)}
-                    title={dayData ? `${dayData.date.toLocaleDateString()}: ${dayData.count} submission(s), ${dayData.accepted} accepted` : ''}
-                  >
-                    {dayData && dayData.count > 0 && (
-                      <span className="font-medium">{dayData.day}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-              
-              {/* Legend - compact */}
-              <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground pt-1">
-                <span>Less</span>
-                <div className="flex gap-0.5">
-                  <div className="w-2.5 h-2.5 rounded bg-gray-100 dark:bg-gray-800"></div>
-                  <div className="w-2.5 h-2.5 rounded bg-green-200 dark:bg-green-900/30"></div>
-                  <div className="w-2.5 h-2.5 rounded bg-green-400 dark:bg-green-700/50"></div>
-                  <div className="w-2.5 h-2.5 rounded bg-green-600 dark:bg-green-600/70"></div>
-                  <div className="w-2.5 h-2.5 rounded bg-green-800 dark:bg-green-500"></div>
-                </div>
-                <span>More</span>
-                <span className="text-[9px] text-muted-foreground ml-2">Click a day to see problems solved</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Problem Types Pie Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Problem Types Solved</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {problemTypeData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
-                <PieChart>
-                  <Pie
-                    data={problemTypeData}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    outerRadius={70}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {problemTypeData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
-                No data available
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Languages Pie Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Languages Used</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {languageData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={250}>
-              <PieChart>
-                <Pie
-                  data={languageData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {languageData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                   ))}
-                </Pie>
-                <Tooltip />
-                <Legend />
-              </PieChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm">
-              No data available
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      )}
 
-      {/* Progress Tracking */}
-      <div className="grid md:grid-cols-2 gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Target className="h-5 w-5" />
-              Progress Overview
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-muted-foreground">Acceptance Rate</span>
-                <span className="font-medium">{stats.acceptanceRate}%</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-green-600 h-2 rounded-full transition-all"
-                  style={{ width: `${stats.acceptanceRate}%` }}
-                />
-              </div>
-            </div>
-            
-            <div>
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-muted-foreground">Problems Solved</span>
-                <span className="font-medium">{stats.problemsSolved}</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all"
-                  style={{ width: `${Math.min((stats.problemsSolved / 50) * 100, 100)}%` }}
-                />
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Goal: 50 problems</p>
-            </div>
-          </CardContent>
-        </Card>
+      {activeSection === 'insights' && (
+        <div className="space-y-6">
+          {/* Monthly Calendar & Problem Types */}
+          <div className="grid md:grid-cols-3 gap-6">
+            {/* Monthly Submission Calendar */}
+            <Card className="md:col-span-2">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    Submission Calendar
+                  </CardTitle>
+                  <div className="flex gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const prevMonth = new Date(selectedMonth)
+                        prevMonth.setMonth(prevMonth.getMonth() - 1)
+                        setSelectedMonth(prevMonth)
+                      }}
+                    >
+                      ← Prev
+                    </Button>
+                    <span className="px-3 py-1 text-sm font-medium">
+                      {monthNames[selectedMonth.getMonth()]} {selectedMonth.getFullYear()}
+                    </span>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const nextMonth = new Date(selectedMonth)
+                        nextMonth.setMonth(nextMonth.getMonth() + 1)
+                        setSelectedMonth(nextMonth)
+                      }}
+                    >
+                      Next →
+                    </Button>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {/* Week day headers */}
+                  <div className="grid grid-cols-7 gap-0.5">
+                    {weekDays.map(day => (
+                      <div key={day} className="text-[10px] font-medium text-center text-muted-foreground py-1">
+                        {day}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Calendar grid - smaller cells */}
+                  <div className="grid grid-cols-7 gap-0.5">
+                    {generateCalendarGrid().flat().map((dayData, index) => (
+                      <div
+                        key={index}
+                        className={`h-8 rounded ${
+                          dayData 
+                            ? getIntensityColor(dayData.count) + ' cursor-pointer hover:ring-1 hover:ring-primary border border-transparent hover:border-primary'
+                            : 'bg-transparent'
+                        } flex items-center justify-center text-[10px] p-0.5`}
+                        onClick={() => handleDateClick(dayData)}
+                        title={dayData ? `${dayData.date.toLocaleDateString()}: ${dayData.count} submission(s), ${dayData.accepted} accepted` : ''}
+                      >
+                        {dayData && (
+                          <span className={`font-medium ${dayData.count === 0 ? 'text-muted-foreground' : ''}`}>
+                            {dayData.day}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Legend - compact */}
+                  <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground pt-1">
+                    <span>Less</span>
+                    <div className="flex gap-0.5">
+                      <div className="w-2.5 h-2.5 rounded bg-gray-100 dark:bg-gray-800"></div>
+                      <div className="w-2.5 h-2.5 rounded bg-green-200 dark:bg-green-900/30"></div>
+                      <div className="w-2.5 h-2.5 rounded bg-green-400 dark:bg-green-700/50"></div>
+                      <div className="w-2.5 h-2.5 rounded bg-green-600 dark:bg-green-600/70"></div>
+                      <div className="w-2.5 h-2.5 rounded bg-green-800 dark:bg-green-500"></div>
+                    </div>
+                    <span>More</span>
+                    <span className="text-[9px] text-muted-foreground ml-2">Click a day to see problems solved</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Award className="h-5 w-5" />
-              Achievements
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className={`flex items-center gap-3 p-3 rounded-lg ${
-              stats.problemsSolved >= 1 
-                ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
-                : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
-            }`}>
-              <Trophy className={`h-6 w-6 ${
-                stats.problemsSolved >= 1 ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'
-              }`} />
-              <div>
-                <p className="font-medium text-foreground">First Problem</p>
-                <p className="text-xs text-muted-foreground">Solve your first problem</p>
-              </div>
-            </div>
-            
-            <div className={`flex items-center gap-3 p-3 rounded-lg ${
-              stats.problemsSolved >= 10 
-                ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' 
-                : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
-            }`}>
-              <Trophy className={`h-6 w-6 ${
-                stats.problemsSolved >= 10 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
-              }`} />
-              <div>
-                <p className="font-medium text-foreground">Problem Solver</p>
-                <p className="text-xs text-muted-foreground">Solve 10 problems</p>
-              </div>
-            </div>
-            
-            <div className={`flex items-center gap-3 p-3 rounded-lg ${
-              stats.acceptanceRate >= 50 
-                ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800' 
-                : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
-            }`}>
-              <Trophy className={`h-6 w-6 ${
-                stats.acceptanceRate >= 50 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400 dark:text-gray-500'
-              }`} />
-              <div>
-                <p className="font-medium text-foreground">Consistent Performer</p>
-                <p className="text-xs text-muted-foreground">50%+ acceptance rate</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+            {/* Problem Types Pie Chart */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Problem Types Solved</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {problemTypeData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height={200}>
+                    <PieChart>
+                      <Pie
+                        data={problemTypeData}
+                        cx="50%"
+                        cy="50%"
+                        labelLine={false}
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        outerRadius={70}
+                        fill="#8884d8"
+                        dataKey="value"
+                      >
+                        {problemTypeData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
+                    No data available
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Languages Pie Chart */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Languages Used</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {languageData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={250}>
+                  <PieChart>
+                    <Pie
+                      data={languageData}
+                      cx="50%"
+                      cy="50%"
+                      labelLine={false}
+                      label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                      outerRadius={80}
+                      fill="#8884d8"
+                      dataKey="value"
+                    >
+                      {languageData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[250px] flex items-center justify-center text-muted-foreground text-sm">
+                  No data available
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Progress Tracking */}
+          <div className="grid md:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Target className="h-5 w-5" />
+                  Progress Overview
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">Acceptance Rate</span>
+                    <span className="font-medium">{stats.acceptanceRate}%</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-green-600 h-2 rounded-full transition-all"
+                      style={{ width: `${stats.acceptanceRate}%` }}
+                    />
+                  </div>
+                </div>
+                
+                <div>
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-muted-foreground">Problems Solved</span>
+                    <span className="font-medium">{stats.problemsSolved}</span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div 
+                      className="bg-blue-600 h-2 rounded-full transition-all"
+                      style={{ width: `${Math.min((stats.problemsSolved / 50) * 100, 100)}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">Goal: 50 problems</p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Award className="h-5 w-5" />
+                  Achievements
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                  stats.problemsSolved >= 1 
+                    ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
+                    : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+                }`}>
+                  <Trophy className={`h-6 w-6 ${
+                    stats.problemsSolved >= 1 ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-gray-500'
+                  }`} />
+                  <div>
+                    <p className="font-medium text-foreground">First Problem</p>
+                    <p className="text-xs text-muted-foreground">Solve your first problem</p>
+                  </div>
+                </div>
+                
+                <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                  stats.problemsSolved >= 10 
+                    ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800' 
+                    : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+                }`}>
+                  <Trophy className={`h-6 w-6 ${
+                    stats.problemsSolved >= 10 ? 'text-blue-600 dark:text-blue-400' : 'text-gray-400 dark:text-gray-500'
+                  }`} />
+                  <div>
+                    <p className="font-medium text-foreground">Problem Solver</p>
+                    <p className="text-xs text-muted-foreground">Solve 10 problems</p>
+                  </div>
+                </div>
+                
+                <div className={`flex items-center gap-3 p-3 rounded-lg ${
+                  stats.acceptanceRate >= 50 
+                    ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-200 dark:border-purple-800' 
+                    : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+                }`}>
+                  <Trophy className={`h-6 w-6 ${
+                    stats.acceptanceRate >= 50 ? 'text-purple-600 dark:text-purple-400' : 'text-gray-400 dark:text-gray-500'
+                  }`} />
+                  <div>
+                    <p className="font-medium text-foreground">Consistent Performer</p>
+                    <p className="text-xs text-muted-foreground">50%+ acceptance rate</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      )}
 
       {/* Date Modal - Show problems solved on selected day */}
       {showDateModal && selectedDate && (

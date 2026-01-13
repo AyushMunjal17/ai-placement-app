@@ -77,6 +77,21 @@ const buildFullCodeFromStudentCode = (template, studentCode) => {
   return fullLines.join('\n')
 }
 
+const stripHtmlTags = (str) => {
+  if (!str) return ''
+  return String(str).replace(/<[^>]*>/g, '').trim()
+}
+
+const formatRichTextToPlain = (html) => {
+  if (!html) return ''
+  return String(html)
+    .replace(/<\/(p|div)>/gi, '\n')
+    .replace(/<br\s*\/?\s*>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/\n{2,}/g, '\n')
+    .trim()
+}
+
 const ProblemDetail = () => {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -620,41 +635,22 @@ const ProblemDetail = () => {
             )}
           </div>
           
-          <div className="flex items-center gap-2">
-            <Select value={language} onChange={(e) => setLanguage(e.target.value)} className="w-[140px]">
-              {Object.entries(languages).map(([key, lang]) => (
-                <option key={key} value={key}>{lang.name}</option>
-              ))}
-            </Select>
-            {problem?.supportedLanguages && problem.supportedLanguages.length > 0 && (
-              <span className="text-xs text-muted-foreground">
-                ({problem.supportedLanguages.length} language{problem.supportedLanguages.length !== 1 ? 's' : ''} available)
-              </span>
-            )}
-            <Select value={editorTheme} onChange={(e) => setEditorTheme(e.target.value)} className="w-[120px]">
-              <option value="vs-dark">Dark</option>
-              <option value="light">Light</option>
-            </Select>
-            <div className="flex gap-2 ml-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <div className="flex gap-2">
               {(() => {
-                const stripHtml = (str) => {
-                  if (!str) return ''
-                  return String(str).replace(/<[^>]*>/g, '').trim()
-                }
-                
                 let processedTags = []
                 if (Array.isArray(problem?.tags)) {
-                  processedTags = problem.tags.map(tag => stripHtml(tag)).filter(tag => tag)
+                  processedTags = problem.tags.map(tag => stripHtmlTags(tag)).filter(tag => tag)
                 } else if (problem?.tags) {
-                  const tagsStr = stripHtml(problem.tags)
+                  const tagsStr = stripHtmlTags(problem.tags)
                   processedTags = tagsStr.split(',').map(t => t.trim()).filter(t => t)
                 }
                 
                 let processedCompanyTags = []
                 if (Array.isArray(problem?.companyTags)) {
-                  processedCompanyTags = problem.companyTags.map(company => stripHtml(company)).filter(company => company)
+                  processedCompanyTags = problem.companyTags.map(company => stripHtmlTags(company)).filter(company => company)
                 } else if (problem?.companyTags) {
-                  const companiesStr = stripHtml(problem.companyTags)
+                  const companiesStr = stripHtmlTags(problem.companyTags)
                   processedCompanyTags = companiesStr.split(',').map(c => c.trim()).filter(c => c)
                 }
                 
@@ -1007,7 +1003,9 @@ const ProblemDetail = () => {
                               {testCase.explanation && (
                                 <div>
                                   <div className="text-xs font-medium text-muted-foreground mb-1">Explanation:</div>
-                                  <p className="text-xs text-muted-foreground">{testCase.explanation}</p>
+                                  <p className="text-xs text-muted-foreground whitespace-pre-line">
+                                    {formatRichTextToPlain(testCase.explanation)}
+                                  </p>
                                 </div>
                               )}
                             </div>
@@ -1092,6 +1090,23 @@ const ProblemDetail = () => {
 
         {/* Right Panel - Code Editor */}
         <div className="w-1/2 flex flex-col">
+          <div className="border-b bg-muted/20 px-4 py-2 flex flex-wrap items-center gap-3 justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Language</span>
+              <Select value={language} onChange={(e) => setLanguage(e.target.value)} className="w-[150px]">
+                {Object.entries(languages).map(([key, lang]) => (
+                  <option key={key} value={key}>{lang.name}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Theme</span>
+              <Select value={editorTheme} onChange={(e) => setEditorTheme(e.target.value)} className="w-[130px]">
+                <option value="vs-dark">Dark</option>
+                <option value="light">Light</option>
+              </Select>
+            </div>
+          </div>
           <Editor
             height="calc(100vh - 60px)"
             language={language === 'cpp' ? 'cpp' : language}

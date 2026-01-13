@@ -1,7 +1,7 @@
 import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 
-const ProtectedRoute = ({ children, requireEmailVerification = true }) => {
+const ProtectedRoute = ({ children, requireEmailVerification = true, requiredRole }) => {
   const { isAuthenticated, user, loading } = useAuth()
   const location = useLocation()
 
@@ -25,6 +25,10 @@ const ProtectedRoute = ({ children, requireEmailVerification = true }) => {
     if (location.pathname !== '/verify-email') {
       return <Navigate to="/verify-email" replace />
     }
+  }
+
+  if (requiredRole && user?.role !== requiredRole) {
+    return <Navigate to="/problems" replace />
   }
 
   return children

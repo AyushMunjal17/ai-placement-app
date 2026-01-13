@@ -41,7 +41,7 @@ function App() {
               <Route 
                 path="/create-problem" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="admin">
                     <CreateProblem />
                   </ProtectedRoute>
                 } 
@@ -57,7 +57,7 @@ function App() {
               <Route 
                 path="/admin" 
                 element={
-                  <ProtectedRoute>
+                  <ProtectedRoute requiredRole="admin">
                     <AdminDashboard />
                   </ProtectedRoute>
                 } 
