@@ -2,9 +2,11 @@ const nodemailer = require('nodemailer');
 
 // Create transporter - using Gmail as default (can be configured via env)
 const createTransporter = () => {
-  // Check if email is configured
-  if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD) {
-    console.error('❌ Email configuration missing! EMAIL_USER and EMAIL_PASSWORD must be set in .env file');
+  const hasServiceConfig = process.env.EMAIL_USER && process.env.EMAIL_PASSWORD;
+  const hasSMTPConfig = process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD;
+
+  if (!hasServiceConfig && !hasSMTPConfig) {
+    console.error('❌ Email configuration missing! Provide either EMAIL_USER/EMAIL_PASSWORD or SMTP_HOST/SMTP_USER/SMTP_PASSWORD in the backend .env file.');
     return null;
   }
 
@@ -12,7 +14,7 @@ const createTransporter = () => {
     let transporter;
     
     // Check if SMTP configuration is provided (alternative method)
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASSWORD) {
+    if (hasSMTPConfig) {
       // Use SMTP directly (more reliable for Gmail)
       console.log('📧 Using SMTP configuration');
       transporter = nodemailer.createTransport({
@@ -27,6 +29,11 @@ const createTransporter = () => {
     } else {
       // Use service configuration (Gmail, etc.)
       console.log('📧 Using service configuration:', process.env.EMAIL_SERVICE || 'gmail');
+      if (!hasServiceConfig) {
+        console.error('❌ EMAIL_USER/EMAIL_PASSWORD must be set when SMTP override is not provided.');
+        return null;
+      }
+
       transporter = nodemailer.createTransport({
         service: process.env.EMAIL_SERVICE || 'gmail',
         auth: {
