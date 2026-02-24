@@ -68,7 +68,7 @@ function runProcess(cmd, args, stdin, timeoutMs) {
         stderr: timedOut
           ? 'Time Limit Exceeded (10 seconds)'
           : stderr.slice(0, 10000),
-        exitCode: timedOut ? 124 : (code !== null && code !== undefined ? code : 0),exitCode: timedOut ? 124 : code ?? 0,
+        exitCode: timedOut ? 124 : (code !== null && code !== undefined ? code : 0),
       });
     });
 
