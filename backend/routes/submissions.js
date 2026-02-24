@@ -6,42 +6,40 @@ const { authenticateToken } = require('../middlewares/auth');
 
 const router = express.Router();
 
-// Language mapping for Piston API
+// Language mapping for Code Executor service
 const LANGUAGE_MAP = {
   'c': 'c',
-  'cpp': 'c++',
+  'cpp': 'cpp',
   'java': 'java',
   'python': 'python',
   'javascript': 'javascript'
 };
 
-// Piston API configuration
-const PISTON_API_URL = 'https://emkc.org/api/v2/piston';
+// Code Executor microservice URL (self-hosted on Render)
+const CODE_EXECUTOR_URL = process.env.CODE_EXECUTOR_URL || 'http://localhost:8080';
 
-console.log('🚀 Using Piston API:', PISTON_API_URL);
+console.log('🚀 Using Code Executor:', CODE_EXECUTOR_URL);
 
-// @route   GET /api/submissions/test-piston
-// @desc    Test Piston API
+// @route   GET /api/submissions/test-executor
+// @desc    Test Code Executor service
 // @access  Public (for debugging)
-router.get('/test-piston', async (req, res) => {
+router.get('/test-executor', async (req, res) => {
   try {
-    const response = await axios.post(`${PISTON_API_URL}/execute`, {
+    const response = await axios.post(`${CODE_EXECUTOR_URL}/execute`, {
       language: 'python',
-      version: '3.10.0',
-      files: [{
-        content: 'print("Hello from Piston!")'
-      }]
+      code: 'print("Hello from Code Executor!")',
+      stdin: ''
     });
 
     res.json({
-      message: 'Piston API test successful',
-      output: response.data.run.output,
+      message: 'Code Executor test successful',
+      output: response.data.stdout,
       status: 'Working ✅'
     });
   } catch (error) {
-    console.error('Piston test error:', error.response?.data || error.message);
+    console.error('Executor test error:', error.response?.data || error.message);
     res.status(500).json({
-      message: 'Simple Judge0 test failed',
+      message: 'Code Executor test failed',
       error: error.response?.data || error.message
     });
   }
@@ -61,7 +59,7 @@ router.get('/test-judge0', authenticateToken, async (req, res) => {
 
     // Test with a simple "Hello World" program
     const testCode = 'print("Hello from Judge0!")';
-    
+
     const submissionResponse = await axios.post(`${JUDGE0_API_URL}/submissions`, {
       source_code: Buffer.from(testCode).toString('base64'),
       language_id: 71, // Python
@@ -78,7 +76,7 @@ router.get('/test-judge0', authenticateToken, async (req, res) => {
 
     // Wait a bit and get result
     await new Promise(resolve => setTimeout(resolve, 2000));
-    
+
     const resultResponse = await axios.get(`${JUDGE0_API_URL}/submissions/${token}`, {
       headers: {
         'X-RapidAPI-Key': JUDGE0_API_KEY,
@@ -103,45 +101,40 @@ router.get('/test-judge0', authenticateToken, async (req, res) => {
   }
 });
 
-// Helper function to execute code using Piston API
+// Helper function to execute code using self-hosted Code Executor
 const executeCode = async (code, languageId, stdin = '') => {
   try {
-    console.log('🚀 Executing code with Piston API...');
+    console.log('🚀 Executing code with Code Executor...');
     console.log('📝 Code length:', code.length);
     console.log('🔢 Language:', languageId);
     console.log('📥 Input length:', stdin.length);
 
-    // Map language ID to Piston language name
+    // Map language ID to executor language name
     const language = LANGUAGE_MAP[languageId] || languageId;
 
-    // Execute code with Piston
-    const response = await axios.post(`${PISTON_API_URL}/execute`, {
+    // Execute code with our self-hosted executor
+    const response = await axios.post(`${CODE_EXECUTOR_URL}/execute`, {
       language: language,
-      version: '*', // Use latest version
-      files: [{
-        content: code
-      }],
-      stdin: stdin || '',
-      compile_timeout: 10000,
-      run_timeout: 3000,
-      compile_memory_limit: -1,
-      run_memory_limit: -1
+      code: code,
+      stdin: stdin || ''
+    }, {
+      timeout: 15000 // 15 second HTTP timeout
     });
 
     console.log('✅ Execution completed');
     const result = response.data;
 
-    // Map Piston response to our format
+    // Map response to our internal format
     const mappedResult = {
-      stdout: result.run?.output || '',
-      stderr: result.run?.stderr || result.compile?.stderr || '',
-      compile_output: result.compile?.output || '',
+      stdout: result.stdout || '',
+      stderr: result.stderr || '',
+      compile_output: result.compile_output || '',
       status: {
-        id: result.run?.code === 0 ? 3 : 4, // 3 = Accepted, 4 = Wrong Answer
-        description: result.run?.code === 0 ? 'Accepted' : (result.run?.signal || 'Runtime Error')
+        id: result.exitCode === 0 ? 3 : 4, // 3 = Accepted, 4 = Error
+        description: result.exitCode === 0 ? 'Accepted' : 'Runtime Error'
       },
-      time: null, // Piston doesn't provide execution time
-      memory: null // Piston doesn't provide memory usage
+      time: null,
+      memory: null
     };
 
     console.log('🔍 Execution result:');
@@ -152,8 +145,8 @@ const executeCode = async (code, languageId, stdin = '') => {
 
     return mappedResult;
   } catch (error) {
-    console.error('❌ Piston execution error:', error.response?.data || error.message);
-    throw new Error('Code execution failed: ' + (error.response?.data?.message || error.message));
+    console.error('❌ Code Executor error:', error.response?.data || error.message);
+    throw new Error('Code execution failed: ' + (error.response?.data?.error || error.message));
   }
 };
 
@@ -189,10 +182,10 @@ router.post('/run', authenticateToken, async (req, res) => {
       for (let i = 0; i < problem.sampleTestCases.length; i++) {
         const testCase = problem.sampleTestCases[i];
         const input = testCase.isFileBased ? testCase.inputFile : testCase.input;
-        
+
         try {
           const result = await executeCode(code, language_id, input);
-          
+
           let passed = false;
           let status = 'Failed';
           let error = null;
@@ -208,7 +201,7 @@ router.post('/run', authenticateToken, async (req, res) => {
             actualOutput = result.stdout.trim();
             const expectedOutput = (testCase.isFileBased ? testCase.outputFile : testCase.expectedOutput).trim();
             passed = actualOutput === expectedOutput;
-            
+
             if (passed) {
               status = 'Passed';
               totalPassed++;
@@ -318,10 +311,10 @@ router.post('/submit', authenticateToken, async (req, res) => {
 
     for (let i = 0; i < allTestCases.length; i++) {
       const testCase = allTestCases[i];
-      
+
       try {
         const result = await executeCode(code, language_id, testCase.input);
-        
+
         let passed = false;
         let error = null;
 
@@ -333,7 +326,7 @@ router.post('/submit', authenticateToken, async (req, res) => {
           const actualOutput = result.stdout.trim();
           const expectedOutput = testCase.expectedOutput.trim();
           passed = actualOutput === expectedOutput;
-          
+
           if (!passed) {
             error = `Expected: ${expectedOutput}, Got: ${actualOutput}`;
           }
@@ -588,7 +581,7 @@ router.post('/', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('Submit code error:', error);
-    
+
     if (error.name === 'CastError') {
       return res.status(400).json({
         message: 'Invalid problem ID',
@@ -609,7 +602,7 @@ router.post('/', authenticateToken, async (req, res) => {
 router.get('/:id', authenticateToken, async (req, res) => {
   try {
     const submissionId = req.params.id;
-    
+
     const submission = await Submission.findById(submissionId)
       .populate('problemId', 'title difficulty')
       .populate('userId', 'username firstName lastName');
@@ -636,7 +629,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('Get submission error:', error);
-    
+
     if (error.name === 'CastError') {
       return res.status(400).json({
         message: 'Invalid submission ID',
