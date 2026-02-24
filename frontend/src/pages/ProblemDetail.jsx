@@ -502,8 +502,10 @@ const ProblemDetail = () => {
         // Refresh submissions after successful submit
         fetchSubmissions()
         
-        // Fetch suggested problems after submission
-        fetchSuggestedProblems()
+        // Fetch suggested problems only if all test cases passed (Accepted)
+        if (response.data.testResults.every(r => r.passed)) {
+          fetchSuggestedProblems()
+        }
       } else {
         // Fallback
         setOutput(response.data.message || 'Submission completed')
