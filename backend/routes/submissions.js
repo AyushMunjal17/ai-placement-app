@@ -150,6 +150,37 @@ const executeCode = async (code, languageId, stdin = '') => {
   }
 };
 
+// Helper: compile once, run once per test case (batch endpoint)
+// Returns an array of mapped results — one per input string.
+// Compile errors are propagated to every result entry.
+const executeCodeBatch = async (code, languageId, inputs = []) => {
+  const language = LANGUAGE_MAP[languageId] || languageId;
+  console.log(`🚀 Batch execute: ${inputs.length} test cases, language=${language}`);
+
+  const response = await axios.post(`${CODE_EXECUTOR_URL}/batch`, {
+    language,
+    code,
+    inputs
+  }, {
+    // Each run gets 10s + 5s overhead per test case, capped at 120s
+    timeout: Math.min(120000, 15000 + inputs.length * 10000)
+  });
+
+  const { results } = response.data;
+  // Map each raw result to the same shape executeCode() returns
+  return results.map(r => ({
+    stdout: r.stdout || '',
+    stderr: r.stderr || '',
+    compile_output: r.compile_output || '',
+    status: {
+      id: r.exitCode === 0 ? 3 : 4,
+      description: r.exitCode === 0 ? 'Accepted' : 'Runtime Error'
+    },
+    time: null,
+    memory: null
+  }));
+};
+
 // @route   POST /api/submissions/run
 // @desc    Run code with sample test cases validation
 // @access  Private
@@ -174,80 +205,68 @@ router.post('/run', authenticateToken, async (req, res) => {
         });
       }
 
-      // Run against sample test cases only
+      const sampleTestCases = problem.sampleTestCases;
       const testResults = [];
       let allPassed = true;
       let totalPassed = 0;
 
-      for (let i = 0; i < problem.sampleTestCases.length; i++) {
-        const testCase = problem.sampleTestCases[i];
-        const input = testCase.isFileBased ? testCase.inputFile : testCase.input;
+      // Compile once, run once per test case via /batch
+      // Each test case gets its own isolated stdin/stdout — no mixing.
+      const inputs = sampleTestCases.map(tc => tc.isFileBased ? tc.inputFile : tc.input);
+      const execResults = await executeCodeBatch(code, language_id, inputs);
 
-        try {
-          const result = await executeCode(code, language_id, input);
+      for (let i = 0; i < sampleTestCases.length; i++) {
+        const tc = sampleTestCases[i];
+        const result = execResults[i];
+        const expectedOutput = (tc.isFileBased ? tc.outputFile : tc.expectedOutput).trim();
 
-          let passed = false;
-          let status = 'Failed';
-          let error = null;
-          let actualOutput = '';
+        let passed = false;
+        let status = 'Failed';
+        let error = null;
+        let actualOutput = '';
 
-          if (result.compile_output) {
-            error = result.compile_output;
-            status = 'Compilation Error';
-          } else if (result.stderr) {
-            error = result.stderr;
-            status = 'Runtime Error';
-          } else if (result.status.id === 3) { // Accepted
-            actualOutput = result.stdout.trim();
-            const expectedOutput = (testCase.isFileBased ? testCase.outputFile : testCase.expectedOutput).trim();
-            passed = actualOutput === expectedOutput;
-
-            if (passed) {
-              status = 'Passed';
-              totalPassed++;
-            } else {
-              status = 'Wrong Answer';
-              allPassed = false;
-            }
+        if (result.compile_output) {
+          status = 'Compilation Error';
+          error = result.compile_output;
+          allPassed = false;
+        } else if (result.stderr) {
+          status = 'Runtime Error';
+          error = result.stderr;
+          allPassed = false;
+        } else {
+          actualOutput = result.stdout.trim();
+          passed = actualOutput === expectedOutput;
+          if (passed) {
+            status = 'Passed';
+            totalPassed++;
           } else {
-            error = result.status.description;
-            status = result.status.description;
+            status = 'Wrong Answer';
             allPassed = false;
           }
-
-          if (!passed) allPassed = false;
-
-          testResults.push({
-            testCaseNumber: i + 1,
-            input: testCase.input.length > 100 ? testCase.input.substring(0, 100) + '...' : testCase.input,
-            expectedOutput: testCase.expectedOutput.length > 100 ? testCase.expectedOutput.substring(0, 100) + '...' : testCase.expectedOutput,
-            actualOutput: actualOutput.length > 100 ? actualOutput.substring(0, 100) + '...' : actualOutput,
-            passed,
-            status,
-            error,
-            time: result.time,
-            memory: result.memory
-          });
-        } catch (error) {
-          allPassed = false;
-          testResults.push({
-            testCaseNumber: i + 1,
-            passed: false,
-            status: 'Error',
-            error: error.message
-          });
         }
+
+        testResults.push({
+          testCaseNumber: i + 1,
+          input: tc.input.length > 100 ? tc.input.substring(0, 100) + '...' : tc.input,
+          expectedOutput: expectedOutput.length > 100 ? expectedOutput.substring(0, 100) + '...' : expectedOutput,
+          actualOutput: actualOutput.length > 100 ? actualOutput.substring(0, 100) + '...' : actualOutput,
+          passed,
+          status,
+          error,
+          time: result.time,
+          memory: result.memory
+        });
       }
 
       return res.json({
         verdict: allPassed ? 'Accepted' : 'Failed',
-        totalTestCases: problem.sampleTestCases.length,
+        totalTestCases: sampleTestCases.length,
         passedTestCases: totalPassed,
         testResults
       });
     }
 
-    // If no problemId, run with custom input (original behavior)
+    // No problemId — run with custom stdin (original behaviour)
     const result = await executeCode(code, language_id, stdin);
 
     let output = '';
@@ -309,60 +328,54 @@ router.post('/submit', authenticateToken, async (req, res) => {
     const results = [];
     let passedCount = 0;
 
+    // Compile once, run once per test case via /batch
+    // Each test case gets its own isolated stdin/stdout — no mixing.
+    const inputs = allTestCases.map(tc => tc.input);
+    const execResults = await executeCodeBatch(code, language_id, inputs);
+
     for (let i = 0; i < allTestCases.length; i++) {
-      const testCase = allTestCases[i];
+      const tc = allTestCases[i];
+      const result = execResults[i];
+      const expectedOutput = tc.expectedOutput.trim();
 
-      try {
-        const result = await executeCode(code, language_id, testCase.input);
+      let passed = false;
+      let error = null;
+      let actualOutput = '';
+      let status = 'Failed';
 
-        let passed = false;
-        let error = null;
-
-        if (result.compile_output) {
-          error = 'Compilation Error: ' + result.compile_output;
-        } else if (result.stderr) {
-          error = 'Runtime Error: ' + result.stderr;
-        } else if (result.status.id === 3) { // Accepted
-          const actualOutput = result.stdout.trim();
-          const expectedOutput = testCase.expectedOutput.trim();
-          passed = actualOutput === expectedOutput;
-
-          if (!passed) {
-            error = `Expected: ${expectedOutput}, Got: ${actualOutput}`;
-          }
-        } else {
-          error = result.status.description;
+      if (result.compile_output) {
+        status = 'Compilation Error';
+        error = 'Compilation Error: ' + result.compile_output;
+      } else if (result.stderr) {
+        status = 'Runtime Error';
+        error = 'Runtime Error: ' + result.stderr;
+      } else {
+        actualOutput = result.stdout.trim();
+        passed = actualOutput === expectedOutput;
+        status = passed ? 'Passed' : 'Wrong Answer';
+        if (!passed) {
+          error = `Expected: ${expectedOutput}, Got: ${actualOutput}`;
         }
-
-        if (passed) passedCount++;
-
-        results.push({
-          testCaseNumber: i + 1,
-          type: testCase.type,
-          input: testCase.type === 'sample' ? (testCase.input.length > 100 ? testCase.input.substring(0, 100) + '...' : testCase.input) : 'Hidden',
-          expectedOutput: testCase.type === 'sample' ? (testCase.expectedOutput.length > 100 ? testCase.expectedOutput.substring(0, 100) + '...' : testCase.expectedOutput) : 'Hidden',
-          actualOutput: testCase.type === 'sample' && result.stdout ? (result.stdout.trim().length > 100 ? result.stdout.trim().substring(0, 100) + '...' : result.stdout.trim()) : 'Hidden',
-          passed,
-          status: passed ? 'Passed' : (error ? error.split(':')[0] : 'Failed'),
-          error,
-          time: result.time,
-          memory: result.memory
-        });
-
-      } catch (err) {
-        results.push({
-          testCaseNumber: i + 1,
-          type: testCase.type,
-          input: testCase.type === 'sample' ? testCase.input : 'Hidden',
-          expectedOutput: testCase.type === 'sample' ? testCase.expectedOutput : 'Hidden',
-          actualOutput: 'Error',
-          passed: false,
-          status: 'Error',
-          error: err.message,
-          time: null,
-          memory: null
-        });
       }
+
+      if (passed) passedCount++;
+
+      const displayActual = tc.type === 'sample'
+        ? (actualOutput.length > 100 ? actualOutput.substring(0, 100) + '...' : actualOutput)
+        : 'Hidden';
+
+      results.push({
+        testCaseNumber: i + 1,
+        type: tc.type,
+        input: tc.type === 'sample' ? (tc.input.length > 100 ? tc.input.substring(0, 100) + '...' : tc.input) : 'Hidden',
+        expectedOutput: tc.type === 'sample' ? (expectedOutput.length > 100 ? expectedOutput.substring(0, 100) + '...' : expectedOutput) : 'Hidden',
+        actualOutput: displayActual,
+        passed,
+        status,
+        error,
+        time: result.time,
+        memory: result.memory
+      });
     }
 
     // Create submission record
@@ -372,7 +385,7 @@ router.post('/submit', authenticateToken, async (req, res) => {
       problemId,
       problemTitle: problem.title,
       code,
-      language: language_id, // Use language name directly (python, javascript, etc.)
+      language: language_id,
       status: passedCount === allTestCases.length ? 'Accepted' : 'Wrong Answer',
       passedTestCases: passedCount,
       totalTestCases: allTestCases.length,

@@ -176,7 +176,103 @@ app.post('/execute', async (req, res) => {
     // Cleanup temp files
     try {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch (_) {}
+    } catch (_) { }
+  }
+});
+
+// POST /batch — compile once, run once per test case
+// Body: { language, code, inputs: string[] }
+// Returns: { results: Array<{ stdout, stderr, compile_output, exitCode }> }
+app.post('/batch', async (req, res) => {
+  const { language, code, inputs } = req.body;
+
+  if (!language || !code || !Array.isArray(inputs)) {
+    return res.status(400).json({ error: 'language, code, and inputs[] are required' });
+  }
+
+  const lang = LANG_CONFIG[language.toLowerCase()];
+  if (!lang) {
+    return res.status(400).json({
+      error: `Unsupported language: ${language}. Supported: ${Object.keys(LANG_CONFIG).join(', ')}`,
+    });
+  }
+
+  const runId = uuidv4();
+  const tmpDir = path.join(os.tmpdir(), `batch_${runId}`);
+  fs.mkdirSync(tmpDir, { recursive: true });
+
+  try {
+    // ── Step 1: Compile (once) ─────────────────────────────────────────────
+    let runCmd, runArgs;
+    let compileError = null;
+
+    if (language.toLowerCase() === 'java') {
+      const classMatch = code.match(/public\s+class\s+(\w+)/);
+      const className = classMatch ? classMatch[1] : 'Main';
+      const srcFile = path.join(tmpDir, `${className}.java`);
+      fs.writeFileSync(srcFile, code);
+
+      const [cCmd, cArgs] = lang.compile(srcFile, tmpDir);
+      const compileResult = await runProcess(cCmd, cArgs, '', TIMEOUT_MS);
+
+      if (compileResult.exitCode !== 0) {
+        compileError = compileResult.stderr || compileResult.stdout;
+      } else {
+        [runCmd, runArgs] = lang.run(null, tmpDir, className);
+      }
+
+    } else if (lang.compile) {
+      // C / C++
+      const srcFile = path.join(tmpDir, `main.${lang.ext}`);
+      const binFile = path.join(tmpDir, 'main');
+      fs.writeFileSync(srcFile, code);
+
+      const [cCmd, cArgs] = lang.compile(srcFile, binFile);
+      const compileResult = await runProcess(cCmd, cArgs, '', TIMEOUT_MS);
+
+      if (compileResult.exitCode !== 0) {
+        compileError = compileResult.stderr || compileResult.stdout;
+      } else {
+        [runCmd, runArgs] = lang.run(srcFile, binFile);
+      }
+
+    } else {
+      // Python / JavaScript — no compile step
+      const srcFile = path.join(tmpDir, `main.${lang.ext}`);
+      fs.writeFileSync(srcFile, code);
+      [runCmd, runArgs] = lang.run(srcFile);
+    }
+
+    // ── Step 2: Compile failed — return error for every test case ──────────
+    if (compileError !== null) {
+      const results = inputs.map(() => ({
+        stdout: '',
+        stderr: compileError,
+        compile_output: compileError,
+        exitCode: 1,
+      }));
+      return res.json({ results });
+    }
+
+    // ── Step 3: Run once per input (sequential, same binary) ──────────────
+    const results = [];
+    for (const stdin of inputs) {
+      const result = await runProcess(runCmd, runArgs, stdin, TIMEOUT_MS);
+      results.push({
+        stdout: result.stdout,
+        stderr: result.stderr,
+        compile_output: '',
+        exitCode: result.exitCode,
+      });
+    }
+
+    res.json({ results });
+
+  } catch (err) {
+    console.error('Batch execution error:', err);
+    res.status(500).json({ error: 'Internal batch execution error', detail: err.message });
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { }
   }
 });
 
