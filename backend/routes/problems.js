@@ -17,7 +17,7 @@ router.get('/stats', async (req, res) => {
     const totalUsers = await User.countDocuments();
     const totalSubmissions = await Submission.countDocuments();
     const acceptedSubmissions = await Submission.countDocuments({ status: 'Accepted' });
-    
+
     // Calculate overall acceptance rate
     const avgAcceptance = totalSubmissions > 0
       ? Math.round((acceptedSubmissions / totalSubmissions) * 100)
@@ -44,24 +44,24 @@ router.get('/debug/all', async (req, res) => {
     const dbName = mongoose.connection.db.databaseName;
     const connectionState = mongoose.connection.readyState;
     const host = mongoose.connection.host;
-    
+
     console.log('🔍 Database Info:');
     console.log('📊 Database Name:', dbName);
     console.log('🔗 Connection State:', connectionState);
     console.log('🏠 Host:', host);
-    
+
     const allProblems = await Problem.find({}).select('title isPublic isActive publishedBy createdAt');
     console.log('🔍 All problems in database:', allProblems);
-    
+
     // Also check specifically for public/active problems
     const publicProblems = await Problem.find({ isPublic: true, isActive: true }).select('title isPublic isActive');
     console.log('🔍 Public & Active problems:', publicProblems);
-    
+
     // Check all collections in the database
     const collections = await mongoose.connection.db.listCollections().toArray();
     const collectionNames = collections.map(c => c.name);
     console.log('📚 Collections in database:', collectionNames);
-    
+
     res.json({
       message: 'All problems (debug)',
       databaseInfo: {
@@ -87,27 +87,27 @@ router.get('/debug/all', async (req, res) => {
 router.get('/', optionalAuth, async (req, res) => {
   try {
     const { difficulty, tags, companyTags, search, page = 1, limit = 20 } = req.query;
-    
+
     console.log('📋 Fetching problems with filters:', { difficulty, tags, companyTags, search });
-    
+
     // Build query
     const query = { isPublic: true, isActive: true };
     console.log('🔍 Base query:', query);
-    
+
     if (difficulty) {
       query.difficulty = difficulty;
     }
-    
+
     if (tags) {
       const tagArray = tags.split(',').map(tag => tag.trim());
       query.tags = { $in: tagArray };
     }
-    
+
     if (companyTags) {
       const companyTagArray = companyTags.split(',').map(tag => tag.trim());
       query.companyTags = { $in: companyTagArray };
     }
-    
+
     if (search) {
       query.$or = [
         { title: { $regex: search, $options: 'i' } },
@@ -117,10 +117,10 @@ router.get('/', optionalAuth, async (req, res) => {
 
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
-    
+
     console.log('🔍 Final query:', query);
     console.log('📄 Pagination:', { page, limit, skip });
-    
+
     // Fetch problems
     const problems = await Problem.find(query)
       .populate('publishedBy', 'username firstName lastName')
@@ -130,20 +130,20 @@ router.get('/', optionalAuth, async (req, res) => {
 
     const totalProblems = await Problem.countDocuments(query);
     const totalPages = Math.ceil(totalProblems / parseInt(limit));
-    
+
     console.log('📊 Results:', { totalProblems, problemsFound: problems.length });
 
     // Calculate acceptance rate and submission stats for each problem
     const Submission = require('../models/Submission');
     const problemsWithStats = await Promise.all(problems.map(async (problem) => {
       const totalSubmissions = await Submission.countDocuments({ problemId: problem._id });
-      const acceptedSubmissions = await Submission.countDocuments({ 
-        problemId: problem._id, 
-        status: 'Accepted' 
+      const acceptedSubmissions = await Submission.countDocuments({
+        problemId: problem._id,
+        status: 'Accepted'
       });
-      
-      const acceptanceRate = totalSubmissions > 0 
-        ? Math.round((acceptedSubmissions / totalSubmissions) * 100) 
+
+      const acceptanceRate = totalSubmissions > 0
+        ? Math.round((acceptedSubmissions / totalSubmissions) * 100)
         : 0;
 
       return {
@@ -176,14 +176,22 @@ router.get('/', optionalAuth, async (req, res) => {
 });
 
 // @route   GET /api/problems/:id
-// @desc    Get a specific problem by ID
+// @desc    Get a specific problem by ID or slug
 // @access  Public
 router.get('/:id', optionalAuth, async (req, res) => {
   try {
-    const problemId = req.params.id;
-    
-    const problem = await Problem.findById(problemId)
-      .populate('publishedBy', 'username firstName lastName');
+    const identifier = req.params.id;
+
+    // Try to find by ObjectId first (backward compat), then by slug
+    let problem = null;
+    if (mongoose.Types.ObjectId.isValid(identifier)) {
+      problem = await Problem.findById(identifier)
+        .populate('publishedBy', 'username firstName lastName');
+    }
+    if (!problem) {
+      problem = await Problem.findOne({ slug: identifier })
+        .populate('publishedBy', 'username firstName lastName');
+    }
 
     if (!problem) {
       return res.status(404).json({
@@ -201,13 +209,13 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
     // Calculate acceptance rate and submission stats
     const totalSubmissions = await Submission.countDocuments({ problemId: problem._id });
-    const acceptedSubmissions = await Submission.countDocuments({ 
-      problemId: problem._id, 
-      status: 'Accepted' 
+    const acceptedSubmissions = await Submission.countDocuments({
+      problemId: problem._id,
+      status: 'Accepted'
     });
-    
-    const acceptanceRate = totalSubmissions > 0 
-      ? Math.round((acceptedSubmissions / totalSubmissions) * 100) 
+
+    const acceptanceRate = totalSubmissions > 0
+      ? Math.round((acceptedSubmissions / totalSubmissions) * 100)
       : 0;
 
     // Return problem without hidden test cases for public access
@@ -225,14 +233,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
 
   } catch (error) {
     console.error('Get problem error:', error);
-    
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        message: 'Invalid problem ID',
-        error: 'INVALID_ID'
-      });
-    }
-
     res.status(500).json({
       message: 'Server error while fetching problem',
       error: 'SERVER_ERROR'
@@ -284,12 +284,20 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
       });
     }
 
-    // Generate slug from title
-    const slug = title
+    // Generate clean slug from title (no timestamp)
+    const baseSlug = title
       .toLowerCase()
-      .replace(/[^a-zA-Z0-9\s]/g, '') // Remove special characters
-      .replace(/\s+/g, '-') // Replace spaces with hyphens
-      .trim() + '-' + Date.now(); // Add timestamp for uniqueness
+      .replace(/[^a-zA-Z0-9\s]/g, '')
+      .replace(/\s+/g, '-')
+      .trim();
+
+    // Ensure uniqueness by appending a counter if needed
+    let slug = baseSlug;
+    let counter = 1;
+    while (await Problem.findOne({ slug })) {
+      slug = `${baseSlug}-${counter}`;
+      counter++;
+    }
 
     // Create new problem
     const problem = new Problem({
@@ -327,7 +335,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
 
   } catch (error) {
     console.error('Create problem error:', error);
-    
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -379,6 +387,47 @@ router.get('/user/my-problems', authenticateToken, async (req, res) => {
       message: 'Server error while fetching user problems',
       error: 'SERVER_ERROR'
     });
+  }
+});
+
+// @route   POST /api/problems/admin/migrate-slugs
+// @desc    Clean existing slugs: strip trailing -<13-digit-timestamp>
+// @access  Private (Admin only)
+router.post('/admin/migrate-slugs', authenticateToken, isAdmin, async (req, res) => {
+  try {
+    const problems = await Problem.find({});
+    let updated = 0;
+    let skipped = 0;
+
+    for (const problem of problems) {
+      // Strip trailing timestamp suffix like -1708773819456 (13 digits)
+      const cleanSlug = problem.slug.replace(/-\d{13}$/, '');
+      if (cleanSlug === problem.slug) {
+        skipped++;
+        continue;
+      }
+
+      // Check if clean slug is already taken by another problem
+      const existing = await Problem.findOne({ slug: cleanSlug, _id: { $ne: problem._id } });
+      if (existing) {
+        // Keep the original if conflict
+        skipped++;
+        continue;
+      }
+
+      problem.slug = cleanSlug;
+      await problem.save({ validateBeforeSave: false });
+      updated++;
+    }
+
+    res.json({
+      message: `Migration complete. Updated: ${updated}, Skipped: ${skipped}`,
+      updated,
+      skipped
+    });
+  } catch (error) {
+    console.error('Migrate slugs error:', error);
+    res.status(500).json({ message: 'Server error during migration', error: error.message });
   }
 });
 

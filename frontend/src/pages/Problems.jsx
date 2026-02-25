@@ -331,7 +331,7 @@ const Problems = () => {
                 <div 
                   key={problem._id} 
                   className="grid grid-cols-12 gap-3 p-4 hover:bg-muted/30 transition-colors items-center cursor-pointer"
-                  onClick={() => navigate(`/problems/${problem._id}`)}
+                  onClick={() => navigate(`/problems/${problem.slug}`)}
                 >
                   {/* Index */}
                   <div className="col-span-1 text-center text-muted-foreground font-medium">

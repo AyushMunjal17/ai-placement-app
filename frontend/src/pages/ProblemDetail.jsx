@@ -93,11 +93,12 @@ const formatRichTextToPlain = (html) => {
 }
 
 const ProblemDetail = () => {
-  const { id } = useParams()
+  const { id } = useParams() // This is now a slug (or legacy ObjectId)
   const navigate = useNavigate()
   
   // Problem state
   const [problem, setProblem] = useState(null)
+  const [problemId, setProblemId] = useState(null) // MongoDB _id for submissions
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   
@@ -166,51 +167,6 @@ const ProblemDetail = () => {
     Hard: 'text-red-600 bg-red-50 border-red-200'
   }
 
-  // Handle wheel events to allow page scrolling when in editor area
-  useEffect(() => {
-    const handleWheel = (e) => {
-      // Check if the event is from the editor area
-      const target = e.target
-      const editorContainer = target.closest('.monaco-editor')
-      
-      if (editorContainer) {
-        const scrollableElement = editorContainer.querySelector('.monaco-scrollable-element')
-        if (scrollableElement) {
-          const { scrollTop, scrollHeight, clientHeight } = scrollableElement
-          const isAtTop = scrollTop <= 0
-          const isAtBottom = scrollTop + clientHeight >= scrollHeight - 1
-          
-          // Always allow some page scroll when scrolling in editor area
-          // Find the main scrollable container (the one with overflow: auto)
-          const mainContainer = Array.from(document.querySelectorAll('*')).find(el => {
-            const style = window.getComputedStyle(el)
-            return style.overflow === 'auto' || style.overflowY === 'auto'
-          })
-          
-          if (mainContainer) {
-            // If at boundaries, allow full page scroll
-            if ((isAtTop && e.deltaY < 0) || (isAtBottom && e.deltaY > 0)) {
-              mainContainer.scrollBy({ top: e.deltaY, behavior: 'auto' })
-            } else {
-              // When not at boundaries, also allow partial page scroll
-              mainContainer.scrollBy({ top: e.deltaY * 0.3, behavior: 'auto' })
-            }
-          } else {
-            // Fallback: scroll window
-            if ((isAtTop && e.deltaY < 0) || (isAtBottom && e.deltaY > 0)) {
-              window.scrollBy({ top: e.deltaY, behavior: 'auto' })
-            } else {
-              window.scrollBy({ top: e.deltaY * 0.3, behavior: 'auto' })
-            }
-          }
-        }
-      }
-    }
-
-    // Use capture phase to catch events
-    document.addEventListener('wheel', handleWheel, { passive: true, capture: true })
-    return () => document.removeEventListener('wheel', handleWheel, { capture: true })
-  }, [])
 
   useEffect(() => {
     fetchProblem()
@@ -253,6 +209,7 @@ const ProblemDetail = () => {
       const response = await axios.get(`/problems/${id}`)
       const fetchedProblem = response.data.problem
       setProblem(fetchedProblem)
+      setProblemId(fetchedProblem._id) // Store MongoDB _id for submissions
 
       // Set default language to first supported language
       const supportedLangs = fetchedProblem.supportedLanguages || ['python']
@@ -279,7 +236,9 @@ const ProblemDetail = () => {
   const fetchSubmissions = async () => {
     try {
       setLoadingSubmissions(true)
-      const response = await axios.get(`/submissions/problem/${id}`)
+      // Use problemId (_id) if available, otherwise fall back to id param
+      const pid = problemId || id
+      const response = await axios.get(`/submissions/problem/${pid}`)
       setSubmissions(response.data.submissions || [])
     } catch (err) {
       console.error('Fetch submissions error:', err)
@@ -381,7 +340,7 @@ const ProblemDetail = () => {
       const response = await axios.post('/submissions/run', {
         code: finalCode,
         language_id: language, // Send language name (python, javascript, etc.)
-        problemId: id
+        problemId: problemId || id
       })
 
       console.log('Run response:', response.data) // Debug log
@@ -394,6 +353,7 @@ const ProblemDetail = () => {
           // Update states - ensure lastAction is set first
           setLastAction('run')
           setShowOutput(true)
+          setActiveTab('results') // Auto-switch to Results tab
           setTestResults(response.data.testResults)
           setLastRunResults(response.data.testResults)
           setLastRunOutput('')
@@ -489,7 +449,7 @@ const ProblemDetail = () => {
 
     try {
       const response = await axios.post('/submissions/submit', {
-        problemId: id,
+        problemId: problemId || id,
         code: finalCode,
         language_id: language // Send language name (python, javascript, etc.)
       })
@@ -499,6 +459,7 @@ const ProblemDetail = () => {
         setTestResults(response.data.testResults)
         setOutput('')
         setShowSubmitPanel(true)
+        setActiveTab('results') // Auto-switch to Results tab
         // Refresh submissions after successful submit
         fetchSubmissions()
         
@@ -609,7 +570,7 @@ const ProblemDetail = () => {
   }
 
   return (
-    <div className="flex flex-col" style={{ height: '100vh', overflow: 'auto' }}>
+    <div className="flex flex-col" style={{ height: '100vh', overflow: 'hidden' }}>
       {/* Header */}
       <div className="border-b bg-background px-4 py-2 flex-shrink-0">
         <div className="flex items-center justify-between">
@@ -729,12 +690,12 @@ const ProblemDetail = () => {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex flex-1" style={{ minHeight: 'calc(100vh - 60px)' }}>
-        {/* Left Panel - Problem Description */}
-        <div className="w-1/2 border-r flex flex-col">
+      {/* Main Content - both panels scroll independently */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Left Panel - Problem Description / Results */}
+        <div className="w-1/2 border-r flex flex-col overflow-hidden">
           {/* Tabs */}
-          <div className="border-b">
+          <div className="border-b flex-shrink-0">
             <div className="flex">
               <button
                 className={`px-4 py-2 text-sm font-medium border-b-2 ${
@@ -756,48 +717,67 @@ const ProblemDetail = () => {
               >
                 Submissions
               </button>
+              {/* Results tab - visible whenever there are run/submit results */}
+              {(testResults.length > 0 || (lastAction === 'run' && showOutput)) && (
+                <button
+                  className={`px-4 py-2 text-sm font-medium border-b-2 flex items-center gap-1.5 ${
+                    activeTab === 'results'
+                      ? 'border-primary text-primary'
+                      : 'border-transparent text-muted-foreground hover:text-foreground'
+                  }`}
+                  onClick={() => setActiveTab('results')}
+                >
+                  {lastAction === 'run' ? (
+                    <Terminal className="h-3.5 w-3.5" />
+                  ) : (
+                    <CheckCircle className="h-3.5 w-3.5" />
+                  )}
+                  {lastAction === 'run' ? 'Run Results' : 'Submit Results'}
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Content */}
-          <div className="flex-1">
-            {activeTab === 'description' && (
+          {/* Content - independently scrollable */}
+          <div className="flex-1 overflow-y-auto">
+            {/* === RESULTS TAB === */}
+            {activeTab === 'results' && (
               <div className="p-6">
-                {/* Run Results Panel - shown above problem statement */}
+                {/* Run Results */}
                 {lastAction === 'run' && Array.isArray(testResults) && testResults.length > 0 && (
-                  <div className="mb-6 sticky top-0 z-10 bg-white pb-4 border-b">
-                    <div className={`p-4 rounded-lg border-2 ${testResults.every(r => r.passed) ? 'bg-green-50 border-green-500' : 'bg-yellow-50 border-yellow-500'}`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          {testResults.every(r => r.passed) ? (
-                            <CheckCircle className="h-5 w-5 text-green-600" />
-                          ) : (
-                            <AlertCircle className="h-5 w-5 text-yellow-600" />
-                          )}
-                          <span className={`font-bold text-lg ${testResults.every(r => r.passed) ? 'text-green-700' : 'text-yellow-700'}`}>
-                            {testResults.every(r => r.passed) ? 'All Sample Tests Passed' : 'Some Sample Tests Failed'}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTestResults([])
-                            setLastAction('')
-                            setShowOutput(false)
-                          }}
-                          className="text-muted-foreground hover:text-foreground transition-colors"
-                          aria-label="Close panel"
-                        >
-                          <X className="h-5 w-5" />
-                        </button>
+                  <div className={`p-4 rounded-lg border-2 ${testResults.every(r => r.passed) ? 'bg-green-50 border-green-500' : 'bg-yellow-50 border-yellow-500'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {testResults.every(r => r.passed) ? (
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-yellow-600" />
+                        )}
+                        <span className={`font-bold text-lg ${testResults.every(r => r.passed) ? 'text-green-700' : 'text-yellow-700'}`}>
+                          {testResults.every(r => r.passed) ? 'All Sample Tests Passed' : 'Some Sample Tests Failed'}
+                        </span>
                       </div>
-                      <div className="text-sm font-medium mb-3">
-                        Test Cases Passed: {testResults.filter(r => r.passed).length}/{testResults.length}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setTestResults([])
+                          setLastAction('')
+                          setShowOutput(false)
+                          setActiveTab('description')
+                        }}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label="Close panel"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <div className="text-sm font-medium mb-3">
+                      Test Cases Passed: {testResults.filter(r => r.passed).length}/{testResults.length}
+                    </div>
 
-                      {/* Individual Test Results */}
-                      <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {testResults.map((result, index) => (
+                    {/* Individual Run Test Results */}
+                    <div className="space-y-2">
+                      {testResults.map((result, index) => (
                           <div key={index} className={`border rounded p-3 ${result.passed ? 'bg-white border-green-300' : 'bg-white border-yellow-300'}`}>
                             <div className="flex items-center justify-between mb-2">
                               <div className="flex items-center gap-2">
@@ -839,94 +819,106 @@ const ProblemDetail = () => {
                             </div>
                           </div>
                         ))}
-                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* Submit Results Panel - shown above problem statement */}
+                {/* Submit Results */}
                 {lastAction === 'submit' && showSubmitPanel && testResults.length > 0 && (
-                  <div className="mb-6 sticky top-0 z-10 bg-white pb-4 border-b">
-                    <div className={`p-4 rounded-lg border-2 ${testResults.every(r => r.passed) ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          {testResults.every(r => r.passed) ? (
-                            <CheckCircle className="h-5 w-5 text-green-600" />
-                          ) : (
-                            <AlertCircle className="h-5 w-5 text-red-600" />
-                          )}
-                          <span className={`font-bold text-lg ${testResults.every(r => r.passed) ? 'text-green-700' : 'text-red-700'}`}>
-                            {testResults.every(r => r.passed) ? 'Accepted' : 'Wrong Answer'}
-                          </span>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setShowSubmitPanel(false)
-                            setTestResults([])
-                          }}
-                          className="text-muted-foreground hover:text-foreground transition-colors"
-                          aria-label="Close panel"
-                        >
-                          <X className="h-5 w-5" />
-                        </button>
+                  <div className={`p-4 rounded-lg border-2 ${testResults.every(r => r.passed) ? 'bg-green-50 border-green-500' : 'bg-red-50 border-red-500'}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        {testResults.every(r => r.passed) ? (
+                          <CheckCircle className="h-5 w-5 text-green-600" />
+                        ) : (
+                          <AlertCircle className="h-5 w-5 text-red-600" />
+                        )}
+                        <span className={`font-bold text-lg ${testResults.every(r => r.passed) ? 'text-green-700' : 'text-red-700'}`}>
+                          {testResults.every(r => r.passed) ? 'Accepted' : 'Wrong Answer'}
+                        </span>
                       </div>
-                      <div className="text-sm font-medium mb-3">
-                        Test Cases Passed: {testResults.filter(r => r.passed).length}/{testResults.length}
-                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSubmitPanel(false)
+                          setTestResults([])
+                          setActiveTab('description')
+                        }}
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        aria-label="Close panel"
+                      >
+                        <X className="h-5 w-5" />
+                      </button>
+                    </div>
+                    <div className="text-sm font-medium mb-3">
+                      Test Cases Passed: {testResults.filter(r => r.passed).length}/{testResults.length}
+                    </div>
 
-                      {/* Individual Test Results (including hidden, with hidden inputs/outputs masked) */}
-                      <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {testResults.map((result, index) => (
-                          <div key={index} className={`border rounded p-3 ${result.passed ? 'bg-white border-green-300' : 'bg-white border-red-300'}`}>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2">
-                                {result.passed ? (
-                                  <CheckCircle className="h-4 w-4 text-green-600" />
-                                ) : (
-                                  <AlertCircle className="h-4 w-4 text-red-600" />
-                                )}
-                                <span className="font-medium text-sm">
-                                  Test Case {result.testCaseNumber}: {result.status}
-                                </span>
-                              </div>
+                    {/* Individual Test Results */}
+                    <div className="space-y-2">
+                      {testResults.map((result, index) => (
+                        <div key={index} className={`border rounded p-3 ${result.passed ? 'bg-white border-green-300' : 'bg-white border-red-300'}`}>
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              {result.passed ? (
+                                <CheckCircle className="h-4 w-4 text-green-600" />
+                              ) : (
+                                <AlertCircle className="h-4 w-4 text-red-600" />
+                              )}
+                              <span className="font-medium text-sm">
+                                Test Case {result.testCaseNumber}: {result.status}
+                              </span>
                             </div>
-                            {/* For submit, we only show full details for sample tests; hidden tests keep input/output masked */}
-                            {!result.passed && (
-                              <div className="space-y-2 text-xs mt-2">
-                                {result.input && result.input !== 'Hidden' && (
-                                  <div>
-                                    <span className="font-medium">Input:</span>
-                                    <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto">{result.input}</pre>
-                                  </div>
-                                )}
-                                {result.expectedOutput && result.expectedOutput !== 'Hidden' && (
-                                  <div>
-                                    <span className="font-medium">Expected:</span>
-                                    <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto">{result.expectedOutput}</pre>
-                                  </div>
-                                )}
-                                {result.actualOutput && result.actualOutput !== 'Hidden' && (
-                                  <div>
-                                    <span className="font-medium">Your Output:</span>
-                                    <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto">{result.actualOutput}</pre>
-                                  </div>
-                                )}
-                                {result.error && (
-                                  <div>
-                                    <span className="font-medium text-red-600">Error:</span>
-                                    <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto text-red-600">{result.error}</pre>
-                                  </div>
-                                )}
-                              </div>
-                            )}
                           </div>
-                        ))}
-                      </div>
+                          {!result.passed && (
+                            <div className="space-y-2 text-xs mt-2">
+                              {result.input && result.input !== 'Hidden' && (
+                                <div>
+                                  <span className="font-medium">Input:</span>
+                                  <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto">{result.input}</pre>
+                                </div>
+                              )}
+                              {result.expectedOutput && result.expectedOutput !== 'Hidden' && (
+                                <div>
+                                  <span className="font-medium">Expected:</span>
+                                  <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto">{result.expectedOutput}</pre>
+                                </div>
+                              )}
+                              {result.actualOutput && result.actualOutput !== 'Hidden' && (
+                                <div>
+                                  <span className="font-medium">Your Output:</span>
+                                  <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto">{result.actualOutput}</pre>
+                                </div>
+                              )}
+                              {result.error && (
+                                <div>
+                                  <span className="font-medium text-red-600">Error:</span>
+                                  <pre className="bg-gray-50 p-2 rounded border mt-1 overflow-x-auto text-red-600">{result.error}</pre>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
 
+                {/* Plain output (no test results) */}
+                {lastAction === 'run' && !isRunning && testResults.length === 0 && showOutput && (
+                  <div className="border-t bg-muted/30 p-3 text-sm">
+                    <div className="text-xs font-medium text-muted-foreground mb-1">Output</div>
+                    <pre className="bg-gray-50 p-2 rounded border max-h-40 overflow-auto whitespace-pre-wrap">
+                      {output || 'No output yet. Run your code to see results.'}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* === DESCRIPTION TAB === */}
+            {activeTab === 'description' && (
+              <div className="p-6">
                 <div className="space-y-6">
                   {/* Tags and Companies removed from here - now in modal buttons */}
 
@@ -958,23 +950,18 @@ const ProblemDetail = () => {
                     <h3 className="text-base font-semibold mb-2">Constraints</h3>
                     <div className="text-sm text-muted-foreground leading-relaxed space-y-1">
                       {(() => {
-                        // Strip HTML and split constraints by common separators
                         const stripHtml = (str) => {
                           if (!str) return ''
                           return String(str).replace(/<[^>]*>/g, '').trim()
                         }
-                        
                         const constraintsText = stripHtml(problem?.constraints || '')
-                        // Split by line breaks, semicolons, or bullets, then filter empty
                         const constraints = constraintsText
                           .split(/[\n\r,;•·]/)
                           .map(c => c.trim().replace(/^and\s+/i, ''))
                           .filter(c => c.length > 0)
-                        
                         if (constraints.length === 0) {
                           return <div className="text-sm text-muted-foreground">No constraints specified</div>
                         }
-                        
                         return (
                           <ul className="list-disc list-inside space-y-1">
                             {constraints.map((constraint, index) => (
@@ -1020,6 +1007,7 @@ const ProblemDetail = () => {
               </div>
             )}
 
+            {/* === SUBMISSIONS TAB === */}
             {activeTab === 'submissions' && (
               <div className="p-6">
                 <div>
@@ -1090,8 +1078,8 @@ const ProblemDetail = () => {
           </div>
         </div>
 
-        {/* Right Panel - Code Editor */}
-        <div className="w-1/2 flex flex-col">
+        {/* Right Panel - Code Editor (independently scrollable) */}
+        <div className="w-1/2 flex flex-col overflow-hidden">
           <div className="border-b bg-muted/20 px-4 py-2 flex flex-wrap items-center gap-3 justify-between">
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold uppercase text-muted-foreground tracking-wide">Language</span>
@@ -1109,58 +1097,46 @@ const ProblemDetail = () => {
               </Select>
             </div>
           </div>
-          <Editor
-            height="calc(100vh - 60px)"
-            language={language === 'cpp' ? 'cpp' : language}
-            theme={editorTheme}
-            value={code}
-            onChange={(value) => setCode(value || '')}
-            options={{
-              fontSize: 14,
-              minimap: { enabled: false },
-              scrollBeyondLastLine: false,
-              automaticLayout: true,
-              tabSize: 2,
-              wordWrap: 'on',
-              lineNumbers: 'on',
-              renderLineHighlight: 'all',
-              scrollbar: {
-                vertical: 'auto',
-                horizontal: 'auto'
-              },
-              mouseWheelZoom: false
-            }}
-          />
+          {/* Editor fills remaining height */}
+          <div className="flex-1 overflow-hidden">
+            <Editor
+              height="100%"
+              language={language === 'cpp' ? 'cpp' : language}
+              theme={editorTheme}
+              value={code}
+              onChange={(value) => setCode(value || '')}
+              options={{
+                fontSize: 14,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                tabSize: 2,
+                wordWrap: 'on',
+                lineNumbers: 'on',
+                renderLineHighlight: 'all',
+                scrollbar: {
+                  vertical: 'auto',
+                  horizontal: 'auto'
+                },
+                mouseWheelZoom: false
+              }}
+            />
+          </div>
 
-
-          {lastAction === 'run' && !isRunning && testResults.length === 0 && showOutput && (
-            <div className="border-t bg-muted/30 p-3 text-sm">
-              <div className="text-xs font-medium text-muted-foreground mb-1">Output</div>
-              <pre className="bg-gray-50 p-2 rounded border max-h-40 overflow-auto whitespace-pre-wrap">
-                {output || 'No output yet. Run your code to see results.'}
-              </pre>
-            </div>
-          )}
-
-          {/* Debug: Always show when run is clicked, even if no results */}
-          {lastAction === 'run' && !isRunning && testResults.length === 0 && !output && (
-            <div className="border-t bg-yellow-50 p-3 text-sm">
-              <div className="text-xs font-medium text-yellow-700 mb-1">Debug Info</div>
-              <pre className="bg-white p-2 rounded border max-h-40 overflow-auto whitespace-pre-wrap text-xs">
-                {`Last Action: ${lastAction}
-Test Results Length: ${testResults.length}
-Show Output: ${showOutput}
-Is Running: ${isRunning}
-Check browser console for API response details.`}
-              </pre>
-            </div>
-          )}
-
+          {/* Running indicator shown below editor */}
           {lastAction === 'run' && isRunning && (
-            <div className="border-t bg-muted/30 p-3 text-sm">
+            <div className="border-t bg-muted/30 p-3 text-sm flex-shrink-0">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 <span>Running code...</span>
+              </div>
+            </div>
+          )}
+          {lastAction === 'submit' && isSubmitting && (
+            <div className="border-t bg-muted/30 p-3 text-sm flex-shrink-0">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Submitting solution...</span>
               </div>
             </div>
           )}
@@ -1322,7 +1298,7 @@ Check browser console for API response details.`}
                         className="border rounded-lg p-4 hover:bg-muted/50 transition-colors cursor-pointer"
                         onClick={() => {
                           setShowSuggestionsModal(false)
-                          navigate(`/problems/${suggestedProblem._id}`)
+                          navigate(`/problems/${suggestedProblem.slug || suggestedProblem._id}`)
                           window.location.reload()
                         }}
                       >
@@ -1348,7 +1324,7 @@ Check browser console for API response details.`}
                             onClick={(e) => {
                               e.stopPropagation()
                               setShowSuggestionsModal(false)
-                              navigate(`/problems/${suggestedProblem._id}`)
+                              navigate(`/problems/${suggestedProblem.slug || suggestedProblem._id}`)
                               window.location.reload()
                             }}
                           >

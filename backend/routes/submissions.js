@@ -118,7 +118,7 @@ const executeCode = async (code, languageId, stdin = '') => {
       code: code,
       stdin: stdin || ''
     }, {
-      timeout: 15000 // 15 second HTTP timeout
+      timeout: 60000 // 60s: accounts for Render cold-start + 40s execution
     });
 
     console.log('✅ Execution completed');
@@ -146,6 +146,9 @@ const executeCode = async (code, languageId, stdin = '') => {
     return mappedResult;
   } catch (error) {
     console.error('❌ Code Executor error:', error.response?.data || error.message);
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      throw new Error('Code execution timed out — the executor service may be starting up (Render cold start). Please try again in a few seconds.');
+    }
     throw new Error('Code execution failed: ' + (error.response?.data?.error || error.message));
   }
 };
@@ -157,29 +160,38 @@ const executeCodeBatch = async (code, languageId, inputs = []) => {
   const language = LANGUAGE_MAP[languageId] || languageId;
   console.log(`🚀 Batch execute: ${inputs.length} test cases, language=${language}`);
 
-  const response = await axios.post(`${CODE_EXECUTOR_URL}/batch`, {
-    language,
-    code,
-    inputs
-  }, {
-    // Each run gets 10s + 5s overhead per test case, capped at 120s
-    timeout: Math.min(120000, 15000 + inputs.length * 10000)
-  });
+  try {
+    const response = await axios.post(`${CODE_EXECUTOR_URL}/batch`, {
+      language,
+      code,
+      inputs
+    }, {
+      // 30s cold-start overhead + 40s per test case, capped at 300s
+      timeout: Math.min(300000, 30000 + inputs.length * 40000)
+    });
 
-  const { results } = response.data;
-  // Map each raw result to the same shape executeCode() returns
-  return results.map(r => ({
-    stdout: r.stdout || '',
-    stderr: r.stderr || '',
-    compile_output: r.compile_output || '',
-    status: {
-      id: r.exitCode === 0 ? 3 : 4,
-      description: r.exitCode === 0 ? 'Accepted' : 'Runtime Error'
-    },
-    time: null,
-    memory: null
-  }));
+    const { results } = response.data;
+    // Map each raw result to the same shape executeCode() returns
+    return results.map(r => ({
+      stdout: r.stdout || '',
+      stderr: r.stderr || '',
+      compile_output: r.compile_output || '',
+      status: {
+        id: r.exitCode === 0 ? 3 : 4,
+        description: r.exitCode === 0 ? 'Accepted' : 'Runtime Error'
+      },
+      time: null,
+      memory: null
+    }));
+  } catch (error) {
+    console.error('❌ Batch executor error:', error.code, error.message);
+    if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+      throw new Error('Code execution timed out — the executor service may be starting up (Render cold start). Please try again in a few seconds.');
+    }
+    throw new Error('Batch execution failed: ' + (error.response?.data?.error || error.message));
+  }
 };
+
 
 // @route   POST /api/submissions/run
 // @desc    Run code with sample test cases validation

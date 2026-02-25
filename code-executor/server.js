@@ -9,7 +9,7 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 const PORT = process.env.PORT || 8080;
-const TIMEOUT_MS = 10000; // 10 second execution limit
+const TIMEOUT_MS = 40000; // 40 second execution limit per test case
 
 // Language config: extension, compile command (optional), run command
 const LANG_CONFIG = {
@@ -66,7 +66,7 @@ function runProcess(cmd, args, stdin, timeoutMs) {
       resolve({
         stdout: stdout.slice(0, 50000), // cap output
         stderr: timedOut
-          ? 'Time Limit Exceeded (10 seconds)'
+          ? 'Time Limit Exceeded'
           : stderr.slice(0, 10000),
         exitCode: timedOut ? 124 : (code !== null && code !== undefined ? code : 0),
       });
