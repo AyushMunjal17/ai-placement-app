@@ -123,7 +123,7 @@ function runProcess(cmd, args, stdin, timeoutMs) {
       resolve({
         stdout: stdoutBuf,
         stderr: timedOut ? 'Time Limit Exceeded' : stderrBuf,
-        exitCode: timedOut ? 124 : (code ?? 0),
+        exitCode: timedOut ? 124 : (code !== null && code !== undefined ? code : 0),
         output_truncated: stdoutTruncated || stderrTruncated,
       });
     });
