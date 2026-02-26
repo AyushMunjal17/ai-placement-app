@@ -9,9 +9,43 @@ const app = express();
 app.use(express.json({ limit: '1mb' }));
 
 const PORT = process.env.PORT || 8080;
-const TIMEOUT_MS = 40000; // 40 second execution limit per test case
 
-// Language config: extension, compile command (optional), run command
+// ─── Tunable constants ───────────────────────────────────────────────────────
+const TIMEOUT_MS = 10_000;   // 10 s per compile/run step
+const MAX_CONCURRENT = 3;        // global parallel execution limit
+const MAX_STDOUT_BYTES = 200_000; // 200 KB
+const MAX_STDERR_BYTES = 50_000; //  50 KB
+
+// ─── Semaphore (in-memory FIFO queue, no Redis) ──────────────────────────────
+let activeCount = 0;           // currently running executions
+const waitQueue = [];          // resolve callbacks for queued requests
+
+function acquireSemaphore() {
+  return new Promise((resolve) => {
+    if (activeCount < MAX_CONCURRENT) {
+      activeCount++;
+      console.log(`[concurrency] slot acquired — active=${activeCount} queued=${waitQueue.length}`);
+      resolve();
+    } else {
+      console.log(`[concurrency] queued — active=${activeCount} queued=${waitQueue.length + 1}`);
+      waitQueue.push(resolve);
+    }
+  });
+}
+
+function releaseSemaphore() {
+  if (waitQueue.length > 0) {
+    // hand the slot to the next waiter
+    const next = waitQueue.shift();
+    console.log(`[concurrency] slot handed off — active=${activeCount} queued=${waitQueue.length}`);
+    next();          // activeCount stays the same: one out, one in
+  } else {
+    activeCount--;
+    console.log(`[concurrency] slot released — active=${activeCount} queued=0`);
+  }
+}
+
+// ─── Language config ─────────────────────────────────────────────────────────
 const LANG_CONFIG = {
   python: {
     ext: 'py',
@@ -33,58 +67,103 @@ const LANG_CONFIG = {
   },
   java: {
     ext: 'java',
-    // Java requires the public class name to match filename
     compile: (src, dir) => ['javac', ['-d', dir, src]],
     run: (_, dir, className) => ['java', ['-cp', dir, className]],
   },
 };
 
-// Run a child process with timeout, returning { stdout, stderr, exitCode }
+// ─── Core process runner ──────────────────────────────────────────────────────
+// Returns { stdout, stderr, exitCode, output_truncated }
 function runProcess(cmd, args, stdin, timeoutMs) {
   return new Promise((resolve) => {
-    let stdout = '';
-    let stderr = '';
+    let stdoutBuf = '';
+    let stderrBuf = '';
     let timedOut = false;
+    let stdoutTruncated = false;
+    let stderrTruncated = false;
 
     const proc = spawn(cmd, args, { shell: false });
 
+    // Enforce timeout — kill the child and all its descendants
     const timer = setTimeout(() => {
       timedOut = true;
-      proc.kill('SIGKILL');
+      try { proc.kill('SIGKILL'); } catch (_) { }
     }, timeoutMs);
 
     if (stdin) {
-      proc.stdin.write(stdin);
+      try {
+        proc.stdin.write(stdin);
+      } catch (_) { }
     }
-    proc.stdin.end();
+    try { proc.stdin.end(); } catch (_) { }
 
-    proc.stdout.on('data', (d) => (stdout += d.toString()));
-    proc.stderr.on('data', (d) => (stderr += d.toString()));
+    proc.stdout.on('data', (chunk) => {
+      if (stdoutBuf.length < MAX_STDOUT_BYTES) {
+        stdoutBuf += chunk.toString();
+        if (stdoutBuf.length > MAX_STDOUT_BYTES) {
+          stdoutBuf = stdoutBuf.slice(0, MAX_STDOUT_BYTES);
+          stdoutTruncated = true;
+        }
+      }
+      // drop extra data — don't accumulate it
+    });
+
+    proc.stderr.on('data', (chunk) => {
+      if (stderrBuf.length < MAX_STDERR_BYTES) {
+        stderrBuf += chunk.toString();
+        if (stderrBuf.length > MAX_STDERR_BYTES) {
+          stderrBuf = stderrBuf.slice(0, MAX_STDERR_BYTES);
+          stderrTruncated = true;
+        }
+      }
+    });
 
     proc.on('close', (code) => {
       clearTimeout(timer);
       resolve({
-        stdout: stdout.slice(0, 50000), // cap output
-        stderr: timedOut
-          ? 'Time Limit Exceeded'
-          : stderr.slice(0, 10000),
-        exitCode: timedOut ? 124 : (code !== null && code !== undefined ? code : 0),
+        stdout: stdoutBuf,
+        stderr: timedOut ? 'Time Limit Exceeded' : stderrBuf,
+        exitCode: timedOut ? 124 : (code ?? 0),
+        output_truncated: stdoutTruncated || stderrTruncated,
       });
     });
 
     proc.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ stdout: '', stderr: err.message, exitCode: 1 });
+      resolve({ stdout: '', stderr: err.message, exitCode: 1, output_truncated: false });
     });
   });
 }
 
-// Health check
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function cleanupDir(dir) {
+  try { fs.rmSync(dir, { recursive: true, force: true }); } catch (_) { }
+}
+
+// Merge output_truncated flag into a result object
+function mergeFlag(result, extraFlag = false) {
+  const flagged = result.output_truncated || extraFlag;
+  const out = {
+    stdout: result.stdout,
+    stderr: result.stderr,
+    compile_output: result.compile_output ?? '',
+    exitCode: result.exitCode,
+  };
+  if (flagged) out.output_truncated = true;
+  return out;
+}
+
+// ─── Health check ─────────────────────────────────────────────────────────────
 app.get('/', (req, res) => {
-  res.json({ status: 'ok', service: 'code-executor' });
+  res.json({
+    status: 'ok',
+    service: 'code-executor',
+    active: activeCount,
+    queued: waitQueue.length,
+  });
 });
 
-// POST /execute — main execution endpoint
+// ─── POST /execute ────────────────────────────────────────────────────────────
 app.post('/execute', async (req, res) => {
   const { language, code, stdin = '' } = req.body;
 
@@ -99,90 +178,72 @@ app.post('/execute', async (req, res) => {
     });
   }
 
+  // Wait for a concurrency slot (FIFO)
+  await acquireSemaphore();
+
   const runId = uuidv4();
   const tmpDir = path.join(os.tmpdir(), `exec_${runId}`);
   fs.mkdirSync(tmpDir, { recursive: true });
+
+  console.log(`[execute] START runId=${runId} lang=${language}`);
 
   try {
     let result;
 
     if (language.toLowerCase() === 'java') {
-      // Extract class name from code (default to Main if not found)
       const classMatch = code.match(/public\s+class\s+(\w+)/);
       const className = classMatch ? classMatch[1] : 'Main';
       const srcFile = path.join(tmpDir, `${className}.java`);
       fs.writeFileSync(srcFile, code);
 
-      // Compile
-      const [compileCmd, compileArgs] = lang.compile(srcFile, tmpDir);
-      const compileResult = await runProcess(compileCmd, compileArgs, '', TIMEOUT_MS);
+      const [cCmd, cArgs] = lang.compile(srcFile, tmpDir);
+      const compileResult = await runProcess(cCmd, cArgs, '', TIMEOUT_MS);
 
       if (compileResult.exitCode !== 0) {
-        return res.json({
-          stdout: '',
-          stderr: compileResult.stderr || compileResult.stdout,
-          compile_output: compileResult.stderr || compileResult.stdout,
-          exitCode: compileResult.exitCode,
-        });
+        const errText = compileResult.stderr || compileResult.stdout;
+        return res.json(mergeFlag({ stdout: '', stderr: errText, compile_output: errText, exitCode: compileResult.exitCode, output_truncated: compileResult.output_truncated }));
       }
 
-      // Run
-      const [runCmd, runArgs] = lang.run(null, tmpDir, className);
-      result = await runProcess(runCmd, runArgs, stdin, TIMEOUT_MS);
+      const [rCmd, rArgs] = lang.run(null, tmpDir, className);
+      result = await runProcess(rCmd, rArgs, stdin, TIMEOUT_MS);
 
     } else if (lang.compile) {
-      // C or C++
       const srcFile = path.join(tmpDir, `main.${lang.ext}`);
       const binFile = path.join(tmpDir, 'main');
       fs.writeFileSync(srcFile, code);
 
-      // Compile
-      const [compileCmd, compileArgs] = lang.compile(srcFile, binFile);
-      const compileResult = await runProcess(compileCmd, compileArgs, '', TIMEOUT_MS);
+      const [cCmd, cArgs] = lang.compile(srcFile, binFile);
+      const compileResult = await runProcess(cCmd, cArgs, '', TIMEOUT_MS);
 
       if (compileResult.exitCode !== 0) {
-        return res.json({
-          stdout: '',
-          stderr: compileResult.stderr || compileResult.stdout,
-          compile_output: compileResult.stderr || compileResult.stdout,
-          exitCode: compileResult.exitCode,
-        });
+        const errText = compileResult.stderr || compileResult.stdout;
+        return res.json(mergeFlag({ stdout: '', stderr: errText, compile_output: errText, exitCode: compileResult.exitCode, output_truncated: compileResult.output_truncated }));
       }
 
-      // Run
-      const [runCmd, runArgs] = lang.run(srcFile, binFile);
-      result = await runProcess(runCmd, runArgs, stdin, TIMEOUT_MS);
+      const [rCmd, rArgs] = lang.run(srcFile, binFile);
+      result = await runProcess(rCmd, rArgs, stdin, TIMEOUT_MS);
 
     } else {
-      // Python or JavaScript — interpreted, no compile step
       const srcFile = path.join(tmpDir, `main.${lang.ext}`);
       fs.writeFileSync(srcFile, code);
-
-      const [runCmd, runArgs] = lang.run(srcFile);
-      result = await runProcess(runCmd, runArgs, stdin, TIMEOUT_MS);
+      const [rCmd, rArgs] = lang.run(srcFile);
+      result = await runProcess(rCmd, rArgs, stdin, TIMEOUT_MS);
     }
 
-    res.json({
-      stdout: result.stdout,
-      stderr: result.stderr,
-      compile_output: '',
-      exitCode: result.exitCode,
-    });
+    res.json(mergeFlag(result));
 
   } catch (err) {
-    console.error('Execution error:', err);
+    console.error(`[execute] ERROR runId=${runId}:`, err);
     res.status(500).json({ error: 'Internal execution error', detail: err.message });
   } finally {
-    // Cleanup temp files
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch (_) { }
+    cleanupDir(tmpDir);
+    releaseSemaphore();
+    console.log(`[execute] DONE  runId=${runId}`);
   }
 });
 
-// POST /batch — compile once, run once per test case
-// Body: { language, code, inputs: string[] }
-// Returns: { results: Array<{ stdout, stderr, compile_output, exitCode }> }
+// ─── POST /batch ──────────────────────────────────────────────────────────────
+// Compiles once, runs once per test case sequentially.
 app.post('/batch', async (req, res) => {
   const { language, code, inputs } = req.body;
 
@@ -197,15 +258,21 @@ app.post('/batch', async (req, res) => {
     });
   }
 
+  // One semaphore slot covers the entire batch (compile + all runs)
+  await acquireSemaphore();
+
   const runId = uuidv4();
   const tmpDir = path.join(os.tmpdir(), `batch_${runId}`);
   fs.mkdirSync(tmpDir, { recursive: true });
 
+  console.log(`[batch] START runId=${runId} lang=${language} cases=${inputs.length}`);
+
   try {
-    // ── Step 1: Compile (once) ─────────────────────────────────────────────
     let runCmd, runArgs;
     let compileError = null;
+    let compileTruncated = false;
 
+    // ── Compile ──────────────────────────────────────────────────────────────
     if (language.toLowerCase() === 'java') {
       const classMatch = code.match(/public\s+class\s+(\w+)/);
       const className = classMatch ? classMatch[1] : 'Main';
@@ -217,12 +284,12 @@ app.post('/batch', async (req, res) => {
 
       if (compileResult.exitCode !== 0) {
         compileError = compileResult.stderr || compileResult.stdout;
+        compileTruncated = compileResult.output_truncated;
       } else {
         [runCmd, runArgs] = lang.run(null, tmpDir, className);
       }
 
     } else if (lang.compile) {
-      // C / C++
       const srcFile = path.join(tmpDir, `main.${lang.ext}`);
       const binFile = path.join(tmpDir, 'main');
       fs.writeFileSync(srcFile, code);
@@ -232,51 +299,54 @@ app.post('/batch', async (req, res) => {
 
       if (compileResult.exitCode !== 0) {
         compileError = compileResult.stderr || compileResult.stdout;
+        compileTruncated = compileResult.output_truncated;
       } else {
         [runCmd, runArgs] = lang.run(srcFile, binFile);
       }
 
     } else {
-      // Python / JavaScript — no compile step
       const srcFile = path.join(tmpDir, `main.${lang.ext}`);
       fs.writeFileSync(srcFile, code);
       [runCmd, runArgs] = lang.run(srcFile);
     }
 
-    // ── Step 2: Compile failed — return error for every test case ──────────
+    // ── Compile failed — propagate error for every test case ─────────────────
     if (compileError !== null) {
-      const results = inputs.map(() => ({
-        stdout: '',
-        stderr: compileError,
-        compile_output: compileError,
-        exitCode: 1,
-      }));
+      const results = inputs.map(() => {
+        const entry = {
+          stdout: '',
+          stderr: compileError,
+          compile_output: compileError,
+          exitCode: 1,
+        };
+        if (compileTruncated) entry.output_truncated = true;
+        return entry;
+      });
       return res.json({ results });
     }
 
-    // ── Step 3: Run once per input (sequential, same binary) ──────────────
+    // ── Run once per input (sequential — safe under the single slot) ─────────
     const results = [];
     for (const stdin of inputs) {
       const result = await runProcess(runCmd, runArgs, stdin, TIMEOUT_MS);
-      results.push({
-        stdout: result.stdout,
-        stderr: result.stderr,
-        compile_output: '',
-        exitCode: result.exitCode,
-      });
+      results.push(mergeFlag(result));
     }
 
     res.json({ results });
 
   } catch (err) {
-    console.error('Batch execution error:', err);
+    console.error(`[batch] ERROR runId=${runId}:`, err);
     res.status(500).json({ error: 'Internal batch execution error', detail: err.message });
   } finally {
-    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) { }
+    cleanupDir(tmpDir);
+    releaseSemaphore();
+    console.log(`[batch] DONE  runId=${runId}`);
   }
 });
 
 app.listen(PORT, () => {
   console.log(`Code executor running on port ${PORT}`);
   console.log(`Supported languages: ${Object.keys(LANG_CONFIG).join(', ')}`);
+  console.log(`Max concurrent executions: ${MAX_CONCURRENT}`);
+  console.log(`Timeout: ${TIMEOUT_MS}ms | stdout cap: ${MAX_STDOUT_BYTES}B | stderr cap: ${MAX_STDERR_BYTES}B`);
 });
