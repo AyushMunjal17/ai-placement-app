@@ -146,7 +146,10 @@ function mergeFlag(result, extraFlag = false) {
   const out = {
     stdout: result.stdout,
     stderr: result.stderr,
-    compile_output: result.compile_output ?? '',
+    compile_output:
+  result.compile_output !== null && result.compile_output !== undefined
+    ? result.compile_output
+    : '',
     exitCode: result.exitCode,
   };
   if (flagged) out.output_truncated = true;
