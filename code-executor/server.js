@@ -12,7 +12,7 @@ const PORT = process.env.PORT || 8080;
 
 // ─── Tunable constants ───────────────────────────────────────────────────────
 const TIMEOUT_MS = 10_000;   // 10 s per compile/run step
-const MAX_CONCURRENT = 3;        // global parallel execution limit
+const MAX_CONCURRENT = 6;        // global parallel execution limit
 const MAX_STDOUT_BYTES = 200_000; // 200 KB
 const MAX_STDERR_BYTES = 50_000; //  50 KB
 
