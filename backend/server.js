@@ -1,4 +1,6 @@
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const cors = require('cors');
 const dotenv = require('dotenv');
 const mongoose = require('mongoose');
@@ -29,7 +31,65 @@ const aiRoutes = require('./routes/ai');
 const resumeRoutes = require('./routes/resume');
 
 const app = express();
+const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 5000;
+
+// ─── Socket.IO Setup ───────────────────────────────────────────────────────────
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.FRONTEND_URL || '*',
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
+
+// Authenticate socket connections using JWT (same token as REST API)
+const jwt = require('jsonwebtoken');
+
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+  if (!token) {
+    console.warn('[socket] No token provided — anonymous socket allowed for polling fallback');
+    socket.userId = null;
+    return next();
+  }
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    socket.userId = decoded.userId || decoded.id || decoded._id;
+    next();
+  } catch (err) {
+    console.warn('[socket] Invalid token:', err.message);
+    socket.userId = null;
+    next(); // allow connection but no userId-based rooms
+  }
+});
+
+io.on('connection', (socket) => {
+  console.log(`[socket] Client connected: ${socket.id} userId=${socket.userId || 'anon'}`);
+
+  // Join a personal room so the worker can push results directly to this user
+  if (socket.userId) {
+    socket.join(`user:${socket.userId}`);
+    console.log(`[socket] User ${socket.userId} joined room user:${socket.userId}`);
+  }
+
+  // Allow frontend to join a job-specific room for targeted result delivery
+  socket.on('subscribe:job', (jobId) => {
+    socket.join(`job:${jobId}`);
+    console.log(`[socket] Socket ${socket.id} subscribed to job:${jobId}`);
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`[socket] Client disconnected: ${socket.id}`);
+  });
+});
+
+// Export io so the worker can call io.to(room).emit(...)
+module.exports.io = io;
+
+// Initialize BullMQ submission worker (starts consuming the Redis queue)
+// Must be required AFTER io is exported so the worker can import it
+require('./workers/submissionWorker');
 
 // Middleware
 app.use(cors());
@@ -47,12 +107,10 @@ app.use('/api/resume', resumeRoutes);
 // Debug Judge0 configuration
 console.log('🔑 Judge0 API URL:', process.env.JUDGE0_API_URL || 'https://judge0-ce.p.rapidapi.com');
 console.log('🔑 Judge0 API Key:', process.env.JUDGE0_API_KEY ? 'Loaded ✅' : 'Missing ❌');
-console.log('🔑 API Key length:', process.env.JUDGE0_API_KEY ? process.env.JUDGE0_API_KEY.length : 0);
-console.log('🔑 API Key first 10 chars:', process.env.JUDGE0_API_KEY ? process.env.JUDGE0_API_KEY.substring(0, 10) + '...' : 'N/A');
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'AI Placement Readiness System Backend is running!',
     timestamp: new Date().toISOString(),
     environment: process.env.NODE_ENV || 'development'
@@ -67,7 +125,7 @@ app.use('*', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ 
+  res.status(500).json({
     message: 'Something went wrong!',
     error: process.env.NODE_ENV === 'development' ? err.message : 'Internal server error'
   });
@@ -84,12 +142,13 @@ const connectDB = async () => {
   }
 };
 
-// Start server
+// Start server (use httpServer instead of app.listen so Socket.IO works)
 const startServer = async () => {
   await connectDB();
-  app.listen(PORT, () => {
+  httpServer.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`🌐 Health check: http://localhost:${PORT}/api/health`);
+    console.log(`🔌 Socket.IO ready for real-time result push`);
   });
 };
 

@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
+import { io } from 'socket.io-client'
 import Editor from '@monaco-editor/react'
 import { useTheme } from '../contexts/ThemeContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../components/ui/card'
@@ -142,6 +143,34 @@ const ProblemDetail = () => {
   const [suggestedProblems, setSuggestedProblems] = useState([])
   const [showSuggestionsModal, setShowSuggestionsModal] = useState(false)
   const [loadingSuggestions, setLoadingSuggestions] = useState(false)
+
+  // Socket.IO for real-time submission results
+  const socketRef = useRef(null)
+
+  // Socket.IO — connect once on mount, disconnect on unmount
+  useEffect(() => {
+    const backendUrl = (import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000/api').replace('/api', '')
+    const token = localStorage.getItem('token')
+
+    const socket = io(backendUrl, {
+      auth: { token },
+      transports: ['websocket', 'polling'],
+      reconnectionAttempts: 5,
+    })
+
+    socket.on('connect', () => {
+      console.log('[socket] Connected:', socket.id)
+    })
+    socket.on('disconnect', () => {
+      console.log('[socket] Disconnected')
+    })
+    socket.on('connect_error', (err) => {
+      console.warn('[socket] Connection error:', err.message)
+    })
+
+    socketRef.current = socket
+    return () => { socket.disconnect() }
+  }, [])
 
   // Language configurations
   const allLanguages = {
@@ -436,47 +465,135 @@ const ProblemDetail = () => {
 
     setIsSubmitting(true)
     setTestResults([])
-    setOutput('')
+    setOutput('⏳ Submitting your solution...')
     setShowOutput(true)
     setLastAction('submit')
     setShowSubmitPanel(false)
 
-    // Build full code using problem-specific template and hidden harness (if configured)
     const baseTemplate = (problem?.codeTemplates && problem.codeTemplates[language] && problem.codeTemplates[language].trim().length > 0)
       ? problem.codeTemplates[language]
       : languages[language].template
     const finalCode = buildFullCodeFromStudentCode(baseTemplate, code)
 
+    // Helper to process a completed result object
+    const handleResult = (data) => {
+      if (data.testResults && data.testResults.length > 0) {
+        setTestResults(data.testResults)
+        setOutput('')
+        setShowSubmitPanel(true)
+        setActiveTab('results')
+        fetchSubmissions()
+        if (data.testResults.every(r => r.passed)) fetchSuggestedProblems()
+      } else {
+        setOutput(`Verdict: ${data.verdict || 'Done'} (${data.passedTestCases}/${data.totalTestCases} passed)`)
+        fetchSubmissions()
+      }
+      setIsSubmitting(false)
+    }
+
     try {
       const response = await axios.post('/submissions/submit', {
         problemId: problemId || id,
         code: finalCode,
-        language_id: language // Send language name (python, javascript, etc.)
+        language_id: language,
       })
 
-      // Handle new format with detailed test results
+      // Old synchronous response (backwards compat)
       if (response.data.testResults) {
-        setTestResults(response.data.testResults)
-        setOutput('')
-        setShowSubmitPanel(true)
-        setActiveTab('results') // Auto-switch to Results tab
-        // Refresh submissions after successful submit
-        fetchSubmissions()
-        
-        // Fetch suggested problems only if all test cases passed (Accepted)
-        if (response.data.testResults.every(r => r.passed)) {
-          fetchSuggestedProblems()
-        }
-      } else {
-        // Fallback
-        setOutput(response.data.message || 'Submission completed')
+        handleResult({ testResults: response.data.testResults, verdict: response.data.verdict,
+          passedTestCases: response.data.passedTestCases, totalTestCases: response.data.totalTestCases })
+        return
       }
+
+      const { jobId } = response.data
+      if (!jobId) {
+        setOutput(response.data.message || 'Submission queued but no jobId returned.')
+        setIsSubmitting(false)
+        return
+      }
+
+      setOutput('⏳ Processing your submission… Please wait.')
+      setActiveTab('results')
+
+      // ── Primary: WebSocket push from server ───────────────────────────────
+      let resolved = false
+      const socket = socketRef.current
+
+      if (socket?.connected) {
+        // Subscribe to the job-specific room
+        socket.emit('subscribe:job', jobId)
+
+        const onResult = (data) => {
+          if (data.status === 'done' || data.status === 'error') {
+            resolved = true
+            socket.off('submission_result', onResult)
+            if (data.status === 'done') {
+              handleResult(data)
+            } else {
+              setOutput('❌ Execution error: ' + (data.error || 'Unknown error'))
+              setIsSubmitting(false)
+            }
+          }
+        }
+        socket.on('submission_result', onResult)
+
+        // Clean up socket listener after 90s no matter what
+        setTimeout(() => {
+          socket.off('submission_result', onResult)
+        }, 90_000)
+      }
+
+      // ── Fallback: Polling every 2s ────────────────────────────────────────
+      // Runs in parallel — whichever finishes first wins.
+      const POLL_INTERVAL = 2000
+      const MAX_POLLS = 45
+      let pollCount = 0
+
+      const poll = async () => {
+        if (resolved) return // WebSocket already handled it
+        pollCount++
+        try {
+          const resultRes = await axios.get(`/submissions/result/${jobId}`)
+          const data = resultRes.data
+
+          if (data.status === 'done') {
+            if (!resolved) { resolved = true; handleResult(data) }
+            return
+          }
+          if (data.status === 'error') {
+            if (!resolved) {
+              resolved = true
+              setOutput('❌ Execution error: ' + (data.error || 'Unknown error'))
+              setIsSubmitting(false)
+            }
+            return
+          }
+          if (pollCount < MAX_POLLS && !resolved) {
+            const elapsed = Math.round((pollCount * POLL_INTERVAL) / 1000)
+            setOutput(`⏳ Processing your submission… (${elapsed}s elapsed)`)
+            setTimeout(poll, POLL_INTERVAL)
+          } else if (!resolved) {
+            setOutput('⏱ Submission is taking longer than expected. Check the Submissions tab in a moment.')
+            setIsSubmitting(false)
+            fetchSubmissions()
+          }
+        } catch (pollErr) {
+          if (!resolved && pollCount < MAX_POLLS) setTimeout(poll, POLL_INTERVAL)
+          else if (!resolved) {
+            setOutput('❌ Failed to get result: ' + (pollErr.response?.data?.error || pollErr.message))
+            setIsSubmitting(false)
+          }
+        }
+      }
+
+      setTimeout(poll, POLL_INTERVAL)
+
     } catch (err) {
       setOutput('Error submitting solution: ' + (err.response?.data?.message || err.message))
-    } finally {
       setIsSubmitting(false)
     }
   }
+
 
   const getAiHelp = async () => {
     if (!code.trim()) {

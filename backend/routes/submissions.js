@@ -3,6 +3,7 @@ const axios = require('axios');
 const Submission = require('../models/Submission');
 const Problem = require('../models/Problem');
 const { authenticateToken } = require('../middlewares/auth');
+const submissionQueue = require('../queues/submissionQueue');
 
 const router = express.Router();
 
@@ -308,8 +309,62 @@ router.post('/run', authenticateToken, async (req, res) => {
   }
 });
 
+// @route   GET /api/submissions/result/:jobId
+// @desc    Poll for async submission result (used by frontend after POST /submit)
+// @access  Private
+router.get('/result/:jobId', authenticateToken, async (req, res) => {
+  const { jobId } = req.params;
+
+  try {
+    // 1. Try Redis cache first (fastest)
+    let redisClient;
+    try {
+      const { getRedisClient } = require('../workers/submissionWorker');
+      redisClient = getRedisClient();
+      const cached = await redisClient.get(`result:${jobId}`);
+      if (cached) {
+        return res.json(JSON.parse(cached));
+      }
+    } catch (redisErr) {
+      console.warn('[result] Redis lookup failed, falling back to BullMQ:', redisErr.message);
+    }
+
+    // 2. Check BullMQ job state
+    const job = await submissionQueue.getJob(jobId);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+
+    const state = await job.getState();
+
+    if (state === 'completed') {
+      // returnvalue was stored by the worker
+      return res.json({ ...job.returnvalue, status: 'done' });
+    }
+
+    if (state === 'failed') {
+      return res.json({
+        status: 'error',
+        error: job.failedReason || 'Execution failed',
+        submissionId: job.data?.submissionId,
+      });
+    }
+
+    // Still in queue / processing
+    return res.json({
+      status: 'processing',
+      state,
+      message: 'Your submission is being processed…',
+    });
+
+  } catch (err) {
+    console.error('[result] Error fetching job result:', err);
+    res.status(500).json({ error: 'Failed to fetch result', detail: err.message });
+  }
+});
+
 // @route   POST /api/submissions/submit
-// @desc    Submit solution and test against all test cases
+// @desc    Submit solution — ASYNC: pushes job to Redis queue, returns jobId immediately
 // @access  Private
 router.post('/submit', authenticateToken, async (req, res) => {
   try {
@@ -318,79 +373,20 @@ router.post('/submit', authenticateToken, async (req, res) => {
     if (!problemId || !code || !language_id) {
       return res.status(400).json({
         message: 'Problem ID, code, and language_id are required',
-        error: 'MISSING_FIELDS'
+        error: 'MISSING_FIELDS',
       });
     }
 
-    // Get problem details
+    // Validate problem exists
     const problem = await Problem.findById(problemId);
     if (!problem) {
       return res.status(404).json({
         message: 'Problem not found',
-        error: 'PROBLEM_NOT_FOUND'
+        error: 'PROBLEM_NOT_FOUND',
       });
     }
 
-    // Test against all test cases (sample + hidden)
-    const allTestCases = [
-      ...problem.sampleTestCases.map(tc => ({ input: tc.input, expectedOutput: tc.expectedOutput, type: 'sample' })),
-      ...problem.hiddenTestCases.map(tc => ({ input: tc.input, expectedOutput: tc.expectedOutput, type: 'hidden' }))
-    ];
-
-    const results = [];
-    let passedCount = 0;
-
-    // Compile once, run once per test case via /batch
-    // Each test case gets its own isolated stdin/stdout — no mixing.
-    const inputs = allTestCases.map(tc => tc.input);
-    const execResults = await executeCodeBatch(code, language_id, inputs);
-
-    for (let i = 0; i < allTestCases.length; i++) {
-      const tc = allTestCases[i];
-      const result = execResults[i];
-      const expectedOutput = tc.expectedOutput.trim();
-
-      let passed = false;
-      let error = null;
-      let actualOutput = '';
-      let status = 'Failed';
-
-      if (result.compile_output) {
-        status = 'Compilation Error';
-        error = 'Compilation Error: ' + result.compile_output;
-      } else if (result.stderr) {
-        status = 'Runtime Error';
-        error = 'Runtime Error: ' + result.stderr;
-      } else {
-        actualOutput = result.stdout.trim();
-        passed = actualOutput === expectedOutput;
-        status = passed ? 'Passed' : 'Wrong Answer';
-        if (!passed) {
-          error = `Expected: ${expectedOutput}, Got: ${actualOutput}`;
-        }
-      }
-
-      if (passed) passedCount++;
-
-      const displayActual = tc.type === 'sample'
-        ? (actualOutput.length > 100 ? actualOutput.substring(0, 100) + '...' : actualOutput)
-        : 'Hidden';
-
-      results.push({
-        testCaseNumber: i + 1,
-        type: tc.type,
-        input: tc.type === 'sample' ? (tc.input.length > 100 ? tc.input.substring(0, 100) + '...' : tc.input) : 'Hidden',
-        expectedOutput: tc.type === 'sample' ? (expectedOutput.length > 100 ? expectedOutput.substring(0, 100) + '...' : expectedOutput) : 'Hidden',
-        actualOutput: displayActual,
-        passed,
-        status,
-        error,
-        time: result.time,
-        memory: result.memory
-      });
-    }
-
-    // Create submission record
+    // Create a Pending submission record in MongoDB right away
     const submission = new Submission({
       userId: req.user._id,
       username: req.user.username,
@@ -398,48 +394,39 @@ router.post('/submit', authenticateToken, async (req, res) => {
       problemTitle: problem.title,
       code,
       language: language_id,
-      status: passedCount === allTestCases.length ? 'Accepted' : 'Wrong Answer',
-      passedTestCases: passedCount,
-      totalTestCases: allTestCases.length,
-      executionTime: Math.max(...results.map(r => r.time || 0)),
-      memoryUsed: Math.max(...results.map(r => r.memory || 0)),
-      testCaseResults: results
+      status: 'In Queue',
     });
-
     await submission.save();
 
-    // Update user and problem statistics
-    if (passedCount === allTestCases.length) {
-      // Check if this is the user's first successful submission for this problem
-      const previousSuccess = await Submission.findOne({
-        userId: req.user._id,
-        problemId,
-        status: 'Accepted',
-        _id: { $ne: submission._id }
-      });
+    // Push job to BullMQ queue — worker will handle execution asynchronously
+    // Smart scheduling: fewer test cases = higher priority (processed first)
+    const totalTestCases = (problem.sampleTestCases?.length || 0) + (problem.hiddenTestCases?.length || 0);
+    const priority = totalTestCases <= 5 ? 1 : totalTestCases <= 20 ? 3 : 5; // 1=highest, 5=lowest
 
-      if (!previousSuccess) {
-        req.user.problemsSolved += 1;
-        await req.user.save();
-      }
-    }
+    const job = await submissionQueue.add('run-code', {
+      problemId,
+      code,
+      language_id,
+      userId: req.user._id.toString(),
+      username: req.user.username,
+      submissionId: submission._id.toString(),
+    }, { priority });
 
-    req.user.totalSubmissions += 1;
-    await req.user.save();
+    console.log(`[submit] Queued job ${job.id} for submission ${submission._id}`);
 
-    res.json({
-      verdict: submission.status,
-      totalTestCases: allTestCases.length,
-      passedTestCases: passedCount,
-      testResults: results,
-      submissionId: submission._id
+    // Return immediately with jobId — frontend polls /result/:jobId
+    return res.json({
+      jobId: job.id,
+      submissionId: submission._id,
+      status: 'queued',
+      message: 'Your submission is queued. Poll /api/submissions/result/:jobId for the result.',
     });
 
   } catch (error) {
     console.error('Submit solution error:', error);
     res.status(500).json({
-      message: 'Failed to submit solution',
-      error: error.message
+      message: 'Failed to queue submission',
+      error: error.message,
     });
   }
 });
@@ -495,7 +482,7 @@ router.get('/problem/:problemId', authenticateToken, async (req, res) => {
   }
 });
 
-// @route   POST /api/submissions
+// @route   POST /api/submissions  (legacy — kept for backwards compat, redirects to /submit logic)
 // @desc    Submit code for execution
 // @access  Private
 router.post('/', authenticateToken, async (req, res) => {
