@@ -227,7 +227,7 @@ const worker = new Worker(
     },
     {
         connection,
-        concurrency: 5,           // up to 5 parallel jobs per worker process
+        concurrency: 20,           // up to 20 parallel jobs per worker process
         lockDuration: 300_000,    // 5-min lock (prevents double-processing)
     }
 );
