@@ -1,8 +1,6 @@
 const { Queue } = require('bullmq');
 
-// Redis connection — set REDIS_URL in backend/.env
-// e.g. rediss://default:PASSWORD@HOST:PORT  (Upstash TLS URL)
-//      redis://default:PASSWORD@HOST:PORT   (plain Redis)
+
 const connection = {
     url: process.env.REDIS_URL || 'redis://localhost:6379',
 };
