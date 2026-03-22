@@ -32,7 +32,9 @@ export const AuthProvider = ({ children }) => {
   // Check if user is authenticated on app load
   useEffect(() => {
     const checkAuth = async () => {
-      if (token) {
+      // If we already have a user (e.g. from login), skip verification
+      // This avoids redundant calls and potential race conditions after sign-in
+      if (token && !user) {
         try {
           const response = await axios.post('/auth/verify-token')
           setUser(response.data.user)
@@ -45,6 +47,7 @@ export const AuthProvider = ({ children }) => {
     }
 
     checkAuth()
+    // Specifically skip re-running this if just token changed but user was already set manually
   }, [token])
 
   const login = async (identifier, password) => {
