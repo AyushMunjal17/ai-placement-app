@@ -38,29 +38,29 @@ router.get('/stats', async (req, res) => {
 // @route   GET /api/problems/debug/all
 // @desc    Debug route to see all problems in database
 // @access  Public (temporary for debugging)
-router.get('/debug/all', async (req, res) => {
+router.get('/debug/all', authenticateToken, isAdmin, async (req, res) => {
   try {
     // Check database connection info
     const dbName = mongoose.connection.db.databaseName;
     const connectionState = mongoose.connection.readyState;
     const host = mongoose.connection.host;
 
-    console.log('🔍 Database Info:');
-    console.log('📊 Database Name:', dbName);
-    console.log('🔗 Connection State:', connectionState);
-    console.log('🏠 Host:', host);
+    console.log('ðŸ” Database Info:');
+    console.log('ðŸ“Š Database Name:', dbName);
+    console.log('ðŸ”— Connection State:', connectionState);
+    console.log('ðŸ  Host:', host);
 
     const allProblems = await Problem.find({}).select('title isPublic isActive publishedBy createdAt');
-    console.log('🔍 All problems in database:', allProblems);
+    console.log('ðŸ” All problems in database:', allProblems);
 
     // Also check specifically for public/active problems
     const publicProblems = await Problem.find({ isPublic: true, isActive: true }).select('title isPublic isActive');
-    console.log('🔍 Public & Active problems:', publicProblems);
+    console.log('ðŸ” Public & Active problems:', publicProblems);
 
     // Check all collections in the database
     const collections = await mongoose.connection.db.listCollections().toArray();
     const collectionNames = collections.map(c => c.name);
-    console.log('📚 Collections in database:', collectionNames);
+    console.log('ðŸ“š Collections in database:', collectionNames);
 
     res.json({
       message: 'All problems (debug)',
@@ -88,11 +88,11 @@ router.get('/', optionalAuth, async (req, res) => {
   try {
     const { difficulty, tags, companyTags, search, page = 1, limit = 20 } = req.query;
 
-    console.log('📋 Fetching problems with filters:', { difficulty, tags, companyTags, search });
+    console.log('ðŸ“‹ Fetching problems with filters:', { difficulty, tags, companyTags, search });
 
     // Build query
     const query = { isPublic: true, isActive: true };
-    console.log('🔍 Base query:', query);
+    console.log('ðŸ” Base query:', query);
 
     if (difficulty) {
       query.difficulty = difficulty;
@@ -118,8 +118,8 @@ router.get('/', optionalAuth, async (req, res) => {
     // Calculate pagination
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
-    console.log('🔍 Final query:', query);
-    console.log('📄 Pagination:', { page, limit, skip });
+    console.log('ðŸ” Final query:', query);
+    console.log('ðŸ“„ Pagination:', { page, limit, skip });
 
     // Fetch problems
     const problems = await Problem.find(query)
@@ -131,7 +131,7 @@ router.get('/', optionalAuth, async (req, res) => {
     const totalProblems = await Problem.countDocuments(query);
     const totalPages = Math.ceil(totalProblems / parseInt(limit));
 
-    console.log('📊 Results:', { totalProblems, problemsFound: problems.length });
+    console.log('ðŸ“Š Results:', { totalProblems, problemsFound: problems.length });
 
     // Calculate acceptance rate and submission stats for each problem
     const Submission = require('../models/Submission');
@@ -432,3 +432,4 @@ router.post('/admin/migrate-slugs', authenticateToken, isAdmin, async (req, res)
 });
 
 module.exports = router;
+

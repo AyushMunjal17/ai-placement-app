@@ -1,5 +1,9 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const { createLogger } = require('../../shared/logger');
+const { getCachedUser, setCachedUser } = require('../lib/userCache');
+
+const logger = createLogger('backend.auth');
 
 // Middleware to verify JWT token
 const authenticateToken = async (req, res, next) => {
@@ -17,9 +21,17 @@ const authenticateToken = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Get user from database
-    const user = await User.findById(decoded.userId).select('-password');
+
+    const cached = getCachedUser(decoded.userId);
+    if (cached) {
+      req.user = cached;
+      return next();
+    }
+
+    // Fetch minimal user fields (fast path).
+    const user = await User.findById(decoded.userId)
+      .select('_id username role isActive')
+      .lean();
     
     if (!user) {
       return res.status(401).json({ 
@@ -35,9 +47,10 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    // Add user to request object
+    // Cache + attach
+    setCachedUser(user._id, user);
     req.user = user;
-    next();
+    return next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ 
@@ -53,7 +66,7 @@ const authenticateToken = async (req, res, next) => {
       });
     }
 
-    console.error('Auth middleware error:', error);
+    logger.error('Auth middleware error', { error });
     return res.status(500).json({ 
       message: 'Authentication error',
       error: 'AUTH_ERROR'
@@ -78,19 +91,30 @@ const optionalAuth = async (req, res, next) => {
     const authHeader = req.headers['authorization'];
     const token = authHeader && authHeader.split(' ')[1];
 
-    if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
-      const user = await User.findById(decoded.userId).select('-password');
-      
-      if (user && user.isActive) {
-        req.user = user;
-      }
+    if (!token) {
+      return next();
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const cached = getCachedUser(decoded.userId);
+    if (cached) {
+      req.user = cached;
+      return next();
+    }
+
+    const user = await User.findById(decoded.userId)
+      .select('_id username role isActive')
+      .lean();
+
+    if (user && user.isActive) {
+      setCachedUser(user._id, user);
+      req.user = user;
     }
     
-    next();
+    return next();
   } catch (error) {
     // Continue without authentication if token is invalid
-    next();
+    return next();
   }
 };
 

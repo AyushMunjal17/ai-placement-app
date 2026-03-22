@@ -30,7 +30,7 @@ const submissionSchema = new mongoose.Schema({
   language: {
     type: String,
     required: true,
-    enum: ['c', 'cpp', 'java', 'python']
+    enum: ['c', 'cpp', 'java', 'python', 'javascript']
   },
   // Judge0 submission details
   judge0Token: {
@@ -215,3 +215,4 @@ submissionSchema.statics.getUserStats = async function(userId) {
 };
 
 module.exports = mongoose.model('Submission', submissionSchema);
+

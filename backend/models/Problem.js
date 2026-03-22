@@ -216,7 +216,6 @@ const problemSchema = new mongoose.Schema({
 });
 
 // Indexes for better query performance
-problemSchema.index({ slug: 1 });
 problemSchema.index({ publishedBy: 1 });
 problemSchema.index({ difficulty: 1 });
 problemSchema.index({ tags: 1 });

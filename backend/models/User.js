@@ -114,10 +114,6 @@ const userSchema = new mongoose.Schema({
   timestamps: true // Adds createdAt and updatedAt fields
 });
 
-// Index for better query performance
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
-
 // Hash password before saving
 userSchema.pre('save', async function(next) {
   // Only hash the password if it has been modified (or is new)
