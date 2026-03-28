@@ -26,7 +26,7 @@ RUN npm install --omit=dev
 
 COPY code-executor/server.js ./server.js
 COPY code-executor/lib ./lib
-COPY shared ../shared
+COPY shared /shared
 
 EXPOSE 8080
 
