@@ -1,16 +1,15 @@
-﻿FROM ubuntu:22.04
+FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y curl ca-certificates && \
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y \
     bash \
-    ca-certificates \
-    curl \
     docker.io \
     gcc \
     g++ \
     nodejs \
-    npm \
     openjdk-17-jdk \
     python3 \
     python3-pip \
