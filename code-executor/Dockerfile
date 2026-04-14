@@ -1,4 +1,4 @@
-FROM ubuntu:22.04
+﻿FROM ubuntu:22.04
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -16,10 +16,10 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR /app
 
-COPY package.json ./
+COPY code-executor/package.json ./
 RUN npm install --omit=dev
 
-COPY server.js ./
+COPY code-executor/server.js ./
 
 EXPOSE 8080
 
