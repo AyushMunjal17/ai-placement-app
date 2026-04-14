@@ -31,6 +31,7 @@ const submissionRoutes = require('./routes/submissions');
 const adminRoutes = require('./routes/admin');
 const aiRoutes = require('./routes/ai');
 const resumeRoutes = require('./routes/resume');
+const interviewRoutes = require('./routes/interview');
 
 const app = express();
 
@@ -127,6 +128,7 @@ app.use('/api/submissions', submissionRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/resume', resumeRoutes);
+app.use('/api/interview', interviewRoutes);
 
 // Debug Judge0 configuration
 console.log('🔑 Judge0 API URL:', process.env.JUDGE0_API_URL || 'https://judge0-ce.p.rapidapi.com');

@@ -87,11 +87,13 @@ const Navbar = () => {
             )}
 
             {/* Coming Soon Links */}
-            <div className="flex items-center space-x-1 text-sm font-medium text-muted-foreground cursor-not-allowed">
+            <Link 
+              to="/ai-interview" 
+              className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+            >
               <Brain className="h-4 w-4" />
               <span>AI Interview</span>
-              <span className="text-xs bg-muted px-2 py-1 rounded">Coming Soon</span>
-            </div>
+            </Link>
             
             {isAuthenticated ? (
               <Link 
@@ -99,12 +101,12 @@ const Navbar = () => {
                 className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
               >
                 <FileText className="h-4 w-4" />
-                <span>Resume Maker</span>
+                <span>AI Resume Analyzer</span>
               </Link>
             ) : (
               <div className="flex items-center space-x-1 text-sm font-medium text-muted-foreground cursor-not-allowed">
                 <FileText className="h-4 w-4" />
-                <span>Resume Maker</span>
+                <span>AI Resume Analyzer</span>
                 <span className="text-xs bg-muted px-2 py-1 rounded">Login Required</span>
               </div>
             )}
@@ -205,12 +207,12 @@ const Navbar = () => {
                 )}
               </>
             )}
-            <Button variant="ghost" size="sm" disabled>
-              AI Interview <span className="ml-1 text-xs">(Soon)</span>
-            </Button>
-            <Button variant="ghost" size="sm" disabled>
-              Resume <span className="ml-1 text-xs">(Soon)</span>
-            </Button>
+            <Link to="/ai-interview">
+              <Button variant="ghost" size="sm">AI Interview</Button>
+            </Link>
+            <Link to="/resume-builder">
+              <Button variant="ghost" size="sm">Resume Analyzer</Button>
+            </Link>
           </div>
         </div>
       </div>

@@ -1,591 +1,299 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useCallback } from 'react'
 import axios from 'axios'
 import { Button } from '../components/ui/button'
-import { Input } from '../components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
-import { FileText, Download, Sparkles, Plus, Trash2, Save, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
-
-const TEMPLATE_CATEGORIES = [
-  { id: 'all', label: 'All Templates' },
-  { id: 'popular', label: 'Popular' },
-  { id: 'professional', label: 'Professional' },
-  { id: 'creative', label: 'Creative' },
-  { id: 'specialized', label: 'Specialized' },
-  { id: 'basic', label: 'Basic' }
-]
-
-const RESUME_TEMPLATES = [
-  {
-    id: 'professional',
-    name: 'Professional',
-    summary: 'Polished business format with structured sections',
-    icon: '💼',
-    badge: 'Popular',
-    categories: ['professional', 'popular']
-  },
-  {
-    id: 'creative',
-    name: 'Creative',
-    summary: 'Bold and artistic design to showcase your creativity',
-    icon: '🎨',
-    categories: ['creative']
-  },
-  {
-    id: 'executive',
-    name: 'Executive',
-    summary: 'Premium design for senior-level positions and leadership roles',
-    icon: '👔',
-    categories: ['professional', 'specialized']
-  },
-  {
-    id: 'technical',
-    name: 'Technical',
-    summary: 'Detail-oriented structure for engineers and developers',
-    icon: '💻',
-    categories: ['professional', 'specialized']
-  },
-  {
-    id: 'academic',
-    name: 'Academic',
-    summary: 'Research-focused layout with publications and teaching',
-    icon: '🎓',
-    categories: ['specialized']
-  },
-  {
-    id: 'simple',
-    name: 'Simple',
-    summary: 'Clean single-column format for quick scanning',
-    icon: '📝',
-    categories: ['basic']
-  },
-  {
-    id: 'modern',
-    name: 'Modern',
-    summary: 'Minimalist design with bold typography accents',
-    icon: '✨',
-    categories: ['popular', 'creative']
-  },
-  {
-    id: 'product',
-    name: 'Product Manager',
-    summary: 'Balanced sections for shipping, metrics, and leadership',
-    icon: '📦',
-    categories: ['specialized']
-  },
-  {
-    id: 'consulting',
-    name: 'Consulting',
-    summary: 'Case-structured layout optimized for top firms',
-    icon: '📊',
-    categories: ['professional', 'specialized']
-  },
-  {
-    id: 'graduate',
-    name: 'Graduate',
-    summary: 'Campus-friendly design highlighting projects and coursework',
-    icon: '🎒',
-    categories: ['basic', 'popular']
-  },
-  {
-    id: 'designer',
-    name: 'Designer',
-    summary: 'Aesthetic-forward layout with visual sections',
-    icon: '✏️',
-    categories: ['creative']
-  },
-  {
-    id: 'ats',
-    name: 'ATS Optimized',
-    summary: 'Highly scannable two-column grid built for applicant systems',
-    icon: '⚙️',
-    categories: ['professional', 'basic']
-  },
-  {
-    id: 'finance',
-    name: 'Finance',
-    summary: 'Metrics-heavy structure tailored for finance roles',
-    icon: '💹',
-    categories: ['specialized']
-  },
-  {
-    id: 'marketing',
-    name: 'Marketing',
-    summary: 'Story-driven template highlighting campaigns and impact',
-    icon: '📣',
-    categories: ['creative', 'popular']
-  },
-  {
-    id: 'internship',
-    name: 'Internship',
-    summary: 'Beginner-friendly format emphasizing skills and projects',
-    icon: '🌱',
-    categories: ['basic']
-  }
-]
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card'
+import { 
+  FileText, 
+  Upload, 
+  Loader2, 
+  CheckCircle, 
+  AlertCircle, 
+  Brain, 
+  Target,
+  Sparkles,
+  BarChart3,
+  ShieldCheck,
+  Zap,
+  ArrowRight
+} from 'lucide-react'
 
 const ResumeBuilder = () => {
-  const [loading, setLoading] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [message, setMessage] = useState({ type: '', text: '' })
-  const [resumeId, setResumeId] = useState(null)
-  const [activeSection, setActiveSection] = useState('personal')
-  const [isTemplateModalOpen, setTemplateModalOpen] = useState(false)
-  const [templateFilter, setTemplateFilter] = useState('all')
+  const [file, setFile] = useState(null)
+  const [analyzing, setAnalyzing] = useState(false)
+  const [report, setReport] = useState(null)
+  const [error, setError] = useState('')
+  const [dragActive, setDragActive] = useState(false)
 
-  const [formData, setFormData] = useState({
-    personalInfo: { fullName: '', email: '', phone: '', location: '', linkedin: '', github: '', portfolio: '', summary: '' },
-    education: [{ institution: '', degree: '', field: '', startDate: '', endDate: '', grade: '' }],
-    experience: [{ company: '', position: '', location: '', startDate: '', endDate: '', current: false, description: '', achievements: [''] }],
-    projects: [{ name: '', description: '', technologies: [''], link: '', github: '', highlights: [''] }],
-    skills: { technical: [''], tools: [''], soft: [''], languages: [''] },
-    certifications: [{ name: '', issuer: '', date: '' }],
-    achievements: [''],
-    template: 'professional'
-  })
+  const handleDrag = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.type === "dragenter" || e.type === "dragover") {
+      setDragActive(true)
+    } else if (e.type === "dragleave") {
+      setDragActive(false)
+    }
+  }
 
-  const categoryCounts = useMemo(() => {
-    const counts = RESUME_TEMPLATES.reduce(
-      (acc, template) => {
-        template.categories.forEach(category => {
-          acc[category] = (acc[category] || 0) + 1
-        })
-        return acc
-      },
-      { all: RESUME_TEMPLATES.length }
-    )
-    return counts
-  }, [])
-
-  const filteredTemplates = useMemo(() => {
-    if (templateFilter === 'all') return RESUME_TEMPLATES
-    return RESUME_TEMPLATES.filter(template => template.categories.includes(templateFilter))
-  }, [templateFilter])
-
-  const selectedTemplate = useMemo(
-    () => RESUME_TEMPLATES.find(template => template.id === formData.template) || RESUME_TEMPLATES[0],
-    [formData.template]
-  )
-
-  useEffect(() => {
-    fetchResume()
-  }, [])
-
-  const fetchResume = async () => {
-    try {
-      setLoading(true)
-      const response = await axios.get('/resume')
-      if (response.data.resume) {
-        setFormData(response.data.resume)
-        setResumeId(response.data.resume._id)
+  const handleDrop = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setDragActive(false)
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const uploadedFile = e.dataTransfer.files[0]
+      if (uploadedFile.type === "application/pdf") {
+        setFile(uploadedFile)
+        setError('')
+      } else {
+        setError('Please upload a PDF file.')
       }
+    }
+  }
+
+  const handleFileChange = (e) => {
+    if (e.target.files && e.target.files[0]) {
+      const uploadedFile = e.target.files[0]
+      if (uploadedFile.type === "application/pdf") {
+        setFile(uploadedFile)
+        setError('')
+      } else {
+        setError('Please upload a PDF file.')
+      }
+    }
+  }
+
+  const analyzeResume = async () => {
+    if (!file) return
+    try {
+      setAnalyzing(true)
+      setError('')
+      const formData = new FormData()
+      formData.append('resume', file)
+
+      const response = await axios.post('/resume/analyze', formData)
+
+      setReport(response.data.report)
     } catch (err) {
-      if (err.response?.status !== 404) console.error('Fetch error:', err)
+      console.error('Analysis error:', err)
+      setError(err.response?.data?.message || 'Failed to analyze resume. Please try again.')
     } finally {
-      setLoading(false)
+      setAnalyzing(false)
     }
   }
 
-  const saveResume = async () => {
-    try {
-      setSaving(true)
-      const response = await axios.post('/resume', formData)
-      setResumeId(response.data.resume._id)
-      setMessage({ type: 'success', text: 'Resume saved!' })
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Failed to save' })
-    } finally {
-      setSaving(false)
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000)
-    }
+  const reset = () => {
+    setFile(null)
+    setReport(null)
+    setError('')
   }
 
-  const downloadPDF = async () => {
-    if (!resumeId) {
-      setMessage({ type: 'error', text: 'Please save first' })
-      return
-    }
-    try {
-      const response = await axios.get(`/resume/download/${resumeId}`, { responseType: 'blob' })
-      const url = window.URL.createObjectURL(new Blob([response.data]))
-      const link = document.createElement('a')
-      link.href = url
-      link.setAttribute('download', `resume-${formData.personalInfo.fullName.replace(/\s+/g, '-')}.pdf`)
-      document.body.appendChild(link)
-      link.click()
-      link.remove()
-      setMessage({ type: 'success', text: 'Downloaded!' })
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Download failed' })
-    }
-  }
+  if (report) {
+    return (
+      <div className="max-w-4xl mx-auto py-8 px-4 space-y-8 animate-in fade-in duration-500">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-3xl font-bold">Analysis Report</h1>
+            <p className="text-muted-foreground">Resume: {file.name}</p>
+          </div>
+          <Button variant="outline" onClick={reset}>Analyze Another</Button>
+        </div>
 
-  const enhanceWithAI = async (text, type, callback) => {
-    if (!text.trim()) return
-    try {
-      const response = await axios.post('/resume/enhance', { text, type })
-      callback(response.data.enhanced)
-      setMessage({ type: 'success', text: 'Enhanced!' })
-    } catch (err) {
-      setMessage({ type: 'error', text: 'Enhancement failed' })
-    }
-  }
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <Card className="bg-gradient-to-br from-indigo-600 to-purple-700 text-white border-none shadow-xl">
+            <CardHeader className="text-center pb-2">
+              <CardTitle className="text-sm opacity-90 uppercase tracking-widest font-bold">ATS Score</CardTitle>
+            </CardHeader>
+            <CardContent className="text-center">
+              <div className="text-7xl font-black mb-4">{report.score}</div>
+              <div className="w-full bg-white/20 h-3 rounded-full overflow-hidden">
+                <div 
+                  className="bg-white h-full rounded-full transition-all duration-1000" 
+                  style={{ width: `${report.score}%` }}
+                />
+              </div>
+              <p className="mt-4 text-sm font-medium opacity-90">
+                {report.score > 80 ? "Excellent Match!" : report.score > 60 ? "Good Potential" : "Needs Improvement"}
+              </p>
+            </CardContent>
+          </Card>
 
-  const updatePersonal = (field, value) => {
-    setFormData(prev => ({ ...prev, personalInfo: { ...prev.personalInfo, [field]: value } }))
-  }
+          <Card className="md:col-span-2 shadow-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-indigo-600" />
+                Expert Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-slate-700 leading-relaxed italic border-l-4 border-indigo-200 pl-4 py-2 bg-indigo-50/50 rounded-r-lg">
+                "{report.summary}"
+              </p>
+            </CardContent>
+          </Card>
+        </div>
 
-  const updateArray = (section, index, field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [section]: prev[section].map((item, i) => i === index ? { ...item, [field]: value } : item)
-    }))
-  }
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <Card className="shadow-md">
+            <CardHeader>
+              <CardTitle className="text-indigo-600 flex items-center gap-2 text-lg">
+                <Sparkles className="h-5 w-5" />
+                Optimization Tips
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul className="space-y-3">
+                {report.tips.map((tip, i) => (
+                  <li key={i} className="flex items-start gap-3 text-sm p-3 bg-indigo-50/30 rounded-lg border border-indigo-100/50">
+                    <div className="h-5 w-5 rounded-full bg-indigo-600 text-white flex items-center justify-center shrink-0 text-xs font-bold mt-0.5">{i+1}</div>
+                    <span className="text-slate-700">{tip}</span>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
 
-  const addItem = (section, template) => {
-    setFormData(prev => ({ ...prev, [section]: [...prev[section], template] }))
-  }
+          <div className="space-y-6">
+            <Card className="shadow-md">
+              <CardHeader>
+                <CardTitle className="text-red-600 flex items-center gap-2 text-lg">
+                  <Target className="h-5 w-5" />
+                  Missing Industry Terms
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-wrap gap-2">
+                  {report.missingKeywords.length > 0 ? report.missingKeywords.map((kw, i) => (
+                    <span key={i} className="px-3 py-1.5 bg-red-50 text-red-600 text-xs font-bold rounded-full border border-red-100">
+                      {kw}
+                    </span>
+                  )) : <p className="text-sm text-muted-foreground">All key terms found!</p>}
+                </div>
+              </CardContent>
+            </Card>
 
-  const removeItem = (section, index) => {
-    setFormData(prev => ({ ...prev, [section]: prev[section].filter((_, i) => i !== index) }))
+            <Card className="shadow-md">
+              <CardHeader>
+                <CardTitle className="text-orange-600 flex items-center gap-2 text-lg">
+                  <AlertCircle className="h-5 w-5" />
+                  Formatting Alerts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-2">
+                  {report.formatIssues?.length > 0 ? report.formatIssues.map((issue, i) => (
+                    <li key={i} className="flex items-center gap-2 text-sm text-slate-600">
+                      <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
+                      {issue}
+                    </li>
+                  )) : <p className="text-sm text-muted-foreground">No formatting issues detected.</p>}
+                </ul>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </div>
+    )
   }
-
-  if (loading) return <div className="flex items-center justify-center min-h-screen"><Loader2 className="h-8 w-8 animate-spin" /></div>
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-6xl">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold flex items-center gap-2"><FileText className="h-8 w-8" />AI Resume Builder</h1>
-        <p className="text-muted-foreground mt-2">Create an ATS-friendly resume</p>
-      </div>
-
-      {message.text && (
-        <div className={`mb-4 p-4 rounded-lg flex items-center gap-2 ${message.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}>
-          {message.type === 'success' ? <CheckCircle className="h-5 w-5" /> : <AlertCircle className="h-5 w-5" />}
-          {message.text}
+    <div className="max-w-4xl mx-auto py-12 px-4 space-y-12">
+      <div className="text-center space-y-4">
+        <div className="w-16 h-16 bg-primary/10 text-primary rounded-2xl flex items-center justify-center mx-auto mb-6 transform rotate-3">
+          <Brain className="h-8 w-8" />
         </div>
-      )}
-
-      <div className="flex gap-3 mb-6">
-        <Button onClick={saveResume} disabled={saving}>{saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Save className="h-4 w-4 mr-2" />}Save</Button>
-        <Button onClick={downloadPDF} variant="outline"><Download className="h-4 w-4 mr-2" />Download PDF</Button>
-        <Button variant="outline" onClick={() => setTemplateModalOpen(true)}>
-          <Sparkles className="h-4 w-4 mr-2" />Change Template
-        </Button>
+        <h1 className="text-4xl font-extrabold tracking-tight">AI Resume Analyzer</h1>
+        <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
+          Upload your resume and get instant AI-powered feedback on how to beat the ATS 
+          and land more interviews.
+        </p>
       </div>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Selected Template</CardTitle>
-        </CardHeader>
-        <CardContent className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm text-muted-foreground mb-1">You are currently using</p>
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <span className="text-2xl" aria-hidden>{selectedTemplate.icon}</span>
-              {selectedTemplate.name}
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1 max-w-xl">{selectedTemplate.summary}</p>
-          </div>
-          <Button onClick={() => setTemplateModalOpen(true)}>Browse Templates</Button>
+      <Card className={`border-2 border-dashed transition-all duration-300 ${
+        dragActive ? 'border-primary bg-primary/5 scale-[1.01]' : 'border-muted-foreground/20'
+      }`}>
+        <CardContent className="p-12">
+          {!file ? (
+            <div 
+              className="flex flex-col items-center justify-center space-y-4 cursor-pointer"
+              onDragEnter={handleDrag}
+              onDragLeave={handleDrag}
+              onDragOver={handleDrag}
+              onDrop={handleDrop}
+              onClick={() => document.getElementById('file-upload').click()}
+            >
+              <div className="w-20 h-20 bg-muted rounded-full flex items-center justify-center transition-transform hover:scale-110">
+                <Upload className="h-10 w-10 text-muted-foreground" />
+              </div>
+              <div className="text-center">
+                <p className="text-lg font-semibold">Drop your resume here</p>
+                <p className="text-sm text-muted-foreground">Supports PDF format up to 5MB</p>
+              </div>
+              <input 
+                id="file-upload" 
+                type="file" 
+                className="hidden" 
+                accept="application/pdf"
+                onChange={handleFileChange}
+              />
+              <Button variant="secondary">Browse Files</Button>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center space-y-6">
+              <div className="flex items-center gap-4 p-4 bg-muted/50 rounded-xl w-full max-w-md border border-muted">
+                <div className="p-3 bg-red-100 text-red-600 rounded-lg">
+                  <FileText className="h-6 w-6" />
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <p className="font-bold truncate">{file.name}</p>
+                  <p className="text-xs text-muted-foreground">{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => setFile(null)}>Change</Button>
+              </div>
+
+              <div className="flex gap-4">
+                <Button 
+                  size="lg" 
+                  className="px-12 h-14 text-lg font-bold shadow-lg" 
+                  onClick={analyzeResume}
+                  disabled={analyzing}
+                >
+                  {analyzing ? (
+                    <>
+                      <Loader2 className="h-5 w-5 animate-spin mr-3" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Zap className="h-5 w-5 mr-3 fill-current" />
+                      Run AI Analysis
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      {/* Navigation Tabs */}
-      <div className="flex gap-2 mb-6 overflow-x-auto">
-        {['personal', 'education', 'experience', 'projects', 'skills', 'certifications'].map(section => (
-          <Button key={section} variant={activeSection === section ? 'default' : 'outline'} size="sm"
-            onClick={() => setActiveSection(section)} className="capitalize whitespace-nowrap">
-            {section}
-          </Button>
-        ))}
-      </div>
-
-      {/* Personal Info */}
-      {activeSection === 'personal' && (
-        <Card>
-          <CardHeader><CardTitle>Personal Information</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Input placeholder="Full Name *" value={formData.personalInfo.fullName} onChange={(e) => updatePersonal('fullName', e.target.value)} />
-              <Input placeholder="Email *" value={formData.personalInfo.email} onChange={(e) => updatePersonal('email', e.target.value)} />
-              <Input placeholder="Phone *" value={formData.personalInfo.phone} onChange={(e) => updatePersonal('phone', e.target.value)} />
-              <Input placeholder="Location" value={formData.personalInfo.location} onChange={(e) => updatePersonal('location', e.target.value)} />
-              <Input placeholder="LinkedIn" value={formData.personalInfo.linkedin} onChange={(e) => updatePersonal('linkedin', e.target.value)} />
-              <Input placeholder="GitHub" value={formData.personalInfo.github} onChange={(e) => updatePersonal('github', e.target.value)} />
-            </div>
-            <div>
-              <div className="flex justify-between mb-2">
-                <label className="text-sm font-medium">Summary</label>
-                <Button size="sm" variant="outline" onClick={() => enhanceWithAI(formData.personalInfo.summary, 'summary', (e) => updatePersonal('summary', e))}>
-                  <Sparkles className="h-3 w-3 mr-1" />Enhance
-                </Button>
-              </div>
-              <textarea className="w-full p-3 border rounded-lg min-h-[100px]" placeholder="Professional summary..."
-                value={formData.personalInfo.summary} onChange={(e) => updatePersonal('summary', e.target.value)} />
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Education */}
-      {activeSection === 'education' && (
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between">
-              <CardTitle>Education</CardTitle>
-              <Button size="sm" onClick={() => addItem('education', { institution: '', degree: '', field: '', startDate: '', endDate: '', grade: '' })}>
-                <Plus className="h-4 w-4 mr-1" />Add
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.education.map((edu, i) => (
-              <div key={i} className="p-4 border rounded-lg space-y-3">
-                <div className="flex justify-between">
-                  <h4 className="font-medium">Education {i + 1}</h4>
-                  {formData.education.length > 1 && <Button size="sm" variant="ghost" onClick={() => removeItem('education', i)}><Trash2 className="h-4 w-4 text-red-500" /></Button>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input placeholder="Institution *" value={edu.institution} onChange={(e) => updateArray('education', i, 'institution', e.target.value)} />
-                  <Input placeholder="Degree *" value={edu.degree} onChange={(e) => updateArray('education', i, 'degree', e.target.value)} />
-                  <Input placeholder="Field" value={edu.field} onChange={(e) => updateArray('education', i, 'field', e.target.value)} />
-                  <Input placeholder="Grade" value={edu.grade} onChange={(e) => updateArray('education', i, 'grade', e.target.value)} />
-                  <Input placeholder="Start Date" value={edu.startDate} onChange={(e) => updateArray('education', i, 'startDate', e.target.value)} />
-                  <Input placeholder="End Date" value={edu.endDate} onChange={(e) => updateArray('education', i, 'endDate', e.target.value)} />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Experience */}
-      {activeSection === 'experience' && (
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between">
-              <CardTitle>Experience</CardTitle>
-              <Button size="sm" onClick={() => addItem('experience', { company: '', position: '', location: '', startDate: '', endDate: '', current: false, description: '', achievements: [''] })}>
-                <Plus className="h-4 w-4 mr-1" />Add
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.experience.map((exp, i) => (
-              <div key={i} className="p-4 border rounded-lg space-y-3">
-                <div className="flex justify-between">
-                  <h4 className="font-medium">Experience {i + 1}</h4>
-                  {formData.experience.length > 1 && <Button size="sm" variant="ghost" onClick={() => removeItem('experience', i)}><Trash2 className="h-4 w-4 text-red-500" /></Button>}
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <Input placeholder="Company *" value={exp.company} onChange={(e) => updateArray('experience', i, 'company', e.target.value)} />
-                  <Input placeholder="Position *" value={exp.position} onChange={(e) => updateArray('experience', i, 'position', e.target.value)} />
-                  <Input placeholder="Location" value={exp.location} onChange={(e) => updateArray('experience', i, 'location', e.target.value)} />
-                  <Input placeholder="Start Date" value={exp.startDate} onChange={(e) => updateArray('experience', i, 'startDate', e.target.value)} />
-                  <Input placeholder="End Date" value={exp.endDate} onChange={(e) => updateArray('experience', i, 'endDate', e.target.value)} />
-                </div>
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <label className="text-sm font-medium">Description</label>
-                    <Button size="sm" variant="outline" onClick={() => enhanceWithAI(exp.description, 'experience', (e) => updateArray('experience', i, 'description', e))}>
-                      <Sparkles className="h-3 w-3 mr-1" />Enhance
-                    </Button>
-                  </div>
-                  <textarea className="w-full p-2 border rounded-lg" rows={3} value={exp.description} onChange={(e) => updateArray('experience', i, 'description', e.target.value)} />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Projects */}
-      {activeSection === 'projects' && (
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between">
-              <CardTitle>Projects</CardTitle>
-              <Button size="sm" onClick={() => addItem('projects', { name: '', description: '', technologies: [''], link: '', github: '', highlights: [''] })}>
-                <Plus className="h-4 w-4 mr-1" />Add
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.projects.map((proj, i) => (
-              <div key={i} className="p-4 border rounded-lg space-y-3">
-                <div className="flex justify-between">
-                  <h4 className="font-medium">Project {i + 1}</h4>
-                  {formData.projects.length > 1 && <Button size="sm" variant="ghost" onClick={() => removeItem('projects', i)}><Trash2 className="h-4 w-4 text-red-500" /></Button>}
-                </div>
-                <Input placeholder="Project Name *" value={proj.name} onChange={(e) => updateArray('projects', i, 'name', e.target.value)} />
-                <div className="grid grid-cols-2 gap-3">
-                  <Input placeholder="Demo Link" value={proj.link} onChange={(e) => updateArray('projects', i, 'link', e.target.value)} />
-                  <Input placeholder="GitHub" value={proj.github} onChange={(e) => updateArray('projects', i, 'github', e.target.value)} />
-                </div>
-                <div>
-                  <div className="flex justify-between mb-2">
-                    <label className="text-sm font-medium">Description</label>
-                    <Button size="sm" variant="outline" onClick={() => enhanceWithAI(proj.description, 'project', (e) => updateArray('projects', i, 'description', e))}>
-                      <Sparkles className="h-3 w-3 mr-1" />Enhance
-                    </Button>
-                  </div>
-                  <textarea className="w-full p-2 border rounded-lg" rows={3} value={proj.description} onChange={(e) => updateArray('projects', i, 'description', e.target.value)} />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Skills */}
-      {activeSection === 'skills' && (
-        <Card>
-          <CardHeader><CardTitle>Skills</CardTitle></CardHeader>
-          <CardContent className="space-y-4">
-            {['technical', 'tools', 'soft', 'languages'].map(category => (
-              <div key={category}>
-                <label className="text-sm font-medium capitalize mb-2 block">{category} Skills</label>
-                <Input placeholder={`Enter ${category} skills (comma-separated)`}
-                  value={formData.skills[category].join(', ')}
-                  onChange={(e) => setFormData(prev => ({
-                    ...prev,
-                    skills: { ...prev.skills, [category]: e.target.value.split(',').map(s => s.trim()).filter(Boolean) }
-                  }))}
-                />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Certifications */}
-      {activeSection === 'certifications' && (
-        <Card>
-          <CardHeader>
-            <div className="flex justify-between">
-              <CardTitle>Certifications</CardTitle>
-              <Button size="sm" onClick={() => addItem('certifications', { name: '', issuer: '', date: '' })}>
-                <Plus className="h-4 w-4 mr-1" />Add
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {formData.certifications.map((cert, i) => (
-              <div key={i} className="p-4 border rounded-lg">
-                <div className="flex justify-between mb-3">
-                  <h4 className="font-medium">Certification {i + 1}</h4>
-                  {formData.certifications.length > 1 && <Button size="sm" variant="ghost" onClick={() => removeItem('certifications', i)}><Trash2 className="h-4 w-4 text-red-500" /></Button>}
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <Input placeholder="Name" value={cert.name} onChange={(e) => updateArray('certifications', i, 'name', e.target.value)} />
-                  <Input placeholder="Issuer" value={cert.issuer} onChange={(e) => updateArray('certifications', i, 'issuer', e.target.value)} />
-                  <Input placeholder="Date" value={cert.date} onChange={(e) => updateArray('certifications', i, 'date', e.target.value)} />
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {isTemplateModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setTemplateModalOpen(false)} />
-          <div className="relative z-10 w-full max-w-5xl max-h-[90vh] overflow-hidden rounded-2xl bg-white shadow-2xl">
-            <div className="border-b px-6 py-5 flex items-start justify-between">
-              <div>
-                <h2 className="text-2xl font-semibold">Choose Your Resume Template</h2>
-                <p className="text-sm text-muted-foreground mt-1">Select from 15 professionally designed templates</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <Button variant="ghost" size="sm" asChild>
-                  <a href="mailto:support@example.com" className="flex items-center gap-2">
-                    Need Help?
-                  </a>
-                </Button>
-                <Button variant="outline" size="sm" onClick={() => setTemplateModalOpen(false)}>Close</Button>
-              </div>
-            </div>
-
-            <div className="border-b px-6 py-4 overflow-x-auto">
-              <div className="flex gap-2 min-w-max">
-                {TEMPLATE_CATEGORIES.map(category => (
-                  <button
-                    key={category.id}
-                    onClick={() => setTemplateFilter(category.id)}
-                    className={`px-4 py-2 rounded-full border text-sm transition ${
-                      templateFilter === category.id
-                        ? 'bg-blue-600 text-white border-blue-600 shadow'
-                        : 'bg-white text-slate-600 border-slate-200 hover:border-blue-300'
-                    }`}
-                  >
-                    <span>{category.label}</span>
-                    <span className="ml-2 text-xs opacity-80">
-                      {categoryCounts[category.id] || 0}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="px-6 py-6 overflow-y-auto max-h-[60vh]">
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {filteredTemplates.map(template => {
-                  const isSelected = formData.template === template.id
-                  return (
-                    <button
-                      key={template.id}
-                      onClick={() => {
-                        setFormData(prev => ({ ...prev, template: template.id }))
-                        setTemplateModalOpen(false)
-                      }}
-                      className={`flex flex-col items-start gap-3 rounded-2xl border p-5 text-left transition ${
-                        isSelected
-                          ? 'border-blue-600 bg-blue-50/70 shadow-lg shadow-blue-100'
-                          : 'border-slate-200 hover:border-blue-300 hover:shadow-md'
-                      }`}
-                    >
-                      <div className="flex items-start justify-between w-full">
-                        <span className="text-3xl" aria-hidden>{template.icon}</span>
-                        {template.badge && (
-                          <span className="rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-700">
-                            {template.badge}
-                          </span>
-                        )}
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold">{template.name}</h3>
-                        <p className="text-sm text-muted-foreground mt-1">{template.summary}</p>
-                      </div>
-                      <div className="mt-auto flex flex-wrap gap-2">
-                        {template.categories.map(tag => (
-                          <span key={tag} className="rounded-full bg-slate-100 px-2.5 py-1 text-xs text-slate-600 capitalize">
-                            {tag}
-                          </span>
-                        ))}
-                      </div>
-                      {isSelected && (
-                        <div className="mt-3 inline-flex items-center rounded-full bg-blue-600 px-3 py-1 text-xs font-medium text-white">
-                          Selected
-                        </div>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between border-t px-6 py-4 bg-slate-50">
-              <p className="text-sm text-muted-foreground">
-                Hover over templates to see more details
-              </p>
-              <div className="flex items-center gap-3">
-                <Button variant="outline" onClick={() => setTemplateModalOpen(false)}>Cancel</Button>
-                <Button onClick={() => setTemplateModalOpen(false)}>Done</Button>
-              </div>
-            </div>
-          </div>
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 text-red-600 rounded-xl flex items-center gap-3 animate-in slide-in-from-top-2">
+          <AlertCircle className="shrink-0 h-5 w-5" />
+          <p className="text-sm font-medium">{error}</p>
         </div>
       )}
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-8">
+        {[
+          { icon: BarChart3, title: "ATS Scoring", desc: "See precisely how your resume ranks against hiring algorithms." },
+          { icon: Sparkles, title: "AI Suggestions", desc: "Get specific, line-by-line feedback to improve impact." },
+          { icon: Target, title: "Keyword Match", desc: "Identify missing industry terms that recruiters look for." }
+        ].map((item, i) => (
+          <div key={i} className="p-6 rounded-2xl bg-muted/30 border border-transparent hover:border-primary/20 transition-all hover:bg-white hover:shadow-md group">
+            <item.icon className="h-8 w-8 text-primary mb-4 group-hover:scale-110 transition-transform" />
+            <h3 className="font-bold mb-2">{item.title}</h3>
+            <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

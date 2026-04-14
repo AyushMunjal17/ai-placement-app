@@ -1,10 +1,26 @@
 const express = require('express');
 const axios = require('axios');
 const PDFDocument = require('pdfkit');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
 const Resume = require('../models/Resume');
 const { authenticateToken } = require('../middlewares/auth');
 
 const router = express.Router();
+
+// Configure multer for memory storage
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf') {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PDF files are allowed'), false);
+    }
+  }
+});
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
@@ -94,8 +110,8 @@ router.post('/enhance', authenticateToken, async (req, res) => {
     }
 
     let prompt = '';
-    
-    switch(type) {
+
+    switch (type) {
       case 'summary':
         prompt = `Enhance this resume summary to be more professional, ATS-friendly, and impactful. Keep it concise (2-3 sentences). Focus on skills, experience, and career goals:\n\n"${text}"\n\nProvide only the enhanced summary, no explanations.`;
         break;
@@ -166,6 +182,214 @@ router.post('/enhance', authenticateToken, async (req, res) => {
   }
 });
 
+// @route   POST /api/resume/optimize
+// @desc    Get optimization tips for the entire resume
+// @access  Private
+router.post('/optimize', authenticateToken, async (req, res) => {
+  try {
+    const resumeData = req.body;
+
+    if (!GROQ_API_KEY && !GEMINI_API_KEY) {
+      return res.status(503).json({
+        message: 'AI service is not configured'
+      });
+    }
+
+    const prompt = `Analyze this resume and provide 5-7 specific, actionable optimization tips to improve its ATS score and professional impact.
+    
+    Resume Data:
+    ${JSON.stringify(resumeData, null, 2)}
+    
+    Provide the tips as a JSON object with:
+    - score (estimated ATS score 0-100)
+    - tips (array of strings)
+    - missingKeywords (array of strings of common industry terms missing)`;
+
+    let optimizationResponse;
+
+    if (AI_PROVIDER === 'groq') {
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert technical recruiter and ATS specialist.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.5,
+          max_tokens: 800
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${GROQ_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      optimizationResponse = response.data?.choices?.[0]?.message?.content;
+    } else {
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+      const response = await axios.post(
+        apiUrl,
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.5, maxOutputTokens: 800 }
+        },
+        {
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+      optimizationResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    }
+
+    let report = { score: 0, tips: [], missingKeywords: [] };
+    try {
+      const jsonMatch = optimizationResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        report = JSON.parse(jsonMatch[0]);
+      }
+    } catch (e) {
+      console.warn('Failed to parse optimization JSON', e);
+      report.tips = [optimizationResponse];
+    }
+
+    res.json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error('Optimize resume error:', error);
+    res.status(500).json({
+      message: 'Failed to optimize resume',
+      error: error.message
+    });
+  }
+});
+
+// @route   POST /api/resume/analyze
+// @desc    Analyze uploaded PDF resume
+// @access  Private
+router.post('/analyze', authenticateToken, upload.single('resume'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded' });
+    }
+
+    if (!GROQ_API_KEY && !GEMINI_API_KEY) {
+      return res.status(503).json({ message: 'AI service is not configured' });
+    }
+
+    // Extract text from PDF
+    const pdfData = await pdfParse(req.file.buffer);
+    const resumeText = pdfData.text;
+
+    console.log(`📄 PDF Extracted. Text length: ${resumeText?.length || 0}`);
+
+    if (!resumeText || resumeText.trim().length < 50) {
+      console.warn('⚠️ PDF text extraction resulted in very short text.');
+      return res.status(400).json({ message: 'Could not extract enough text from the PDF. Please ensure it is not a scanned image.' });
+    }
+
+    const prompt = `Analyze this resume text and provide a comprehensive optimization report.
+    
+    Resume Content:
+    ${resumeText}
+    
+    Provide the analysis as a JSON object with:
+    - score (estimated ATS score 0-100)
+    - summary (2-3 sentence overview of the resume quality)
+    - tips (array of 5-7 actionable strings to improve the resume)
+    - missingKeywords (array of strings of industry-relevant keywords that are missing)
+    - formatIssues (array of strings identifying any structural or formatting problems)`;
+
+    let analysisResponse;
+
+    if (AI_PROVIDER === 'groq') {
+      const response = await axios.post(
+        'https://api.groq.com/openai/v1/chat/completions',
+        {
+          model: 'llama-3.3-70b-versatile',
+          messages: [
+            {
+              role: 'system',
+              content: 'You are an expert technical recruiter and ATS optimization specialist. Return only JSON.'
+            },
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          temperature: 0.3,
+          response_format: { type: 'json_object' }
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${GROQ_API_KEY}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      analysisResponse = response.data?.choices?.[0]?.message?.content;
+    } else {
+      const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+      const response = await axios.post(
+        apiUrl,
+        {
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.3,
+            responseMimeType: 'application/json'
+          }
+        },
+        {
+          headers: { 'Content-Type': 'application/json' }
+        }
+      );
+      analysisResponse = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    }
+
+    let report = { score: 0, summary: '', tips: [], missingKeywords: [], formatIssues: [] };
+    try {
+      console.log('🤖 AI Analysis Response received.');
+      const jsonMatch = analysisResponse.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        report = JSON.parse(jsonMatch[0]);
+      } else {
+        throw new Error('No JSON found in AI response');
+      }
+    } catch (e) {
+      console.error('❌ Failed to parse analysis JSON:', e.message);
+      console.log('Raw response:', analysisResponse);
+
+      // Fallback if JSON parsing fails
+      report = {
+        score: 50,
+        summary: "Analysis completed but report formatting had issues.",
+        tips: ["Consider re-uploading your resume.", "Ensure the text is clearly selectable in the PDF."],
+        missingKeywords: [],
+        formatIssues: ["AI Response Format Error"]
+      };
+    }
+
+    res.json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error('Analyze resume error:', error);
+    res.status(500).json({
+      message: 'Failed to analyze resume',
+      error: error.message
+    });
+  }
+});
+
 // @route   GET /api/resume/download/:id
 // @desc    Download resume as PDF
 // @access  Private
@@ -188,11 +412,11 @@ router.get('/download/:id', authenticateToken, async (req, res) => {
 
     // Create PDF
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
-    
+
     // Set response headers
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename=resume-${resume.personalInfo.fullName.replace(/\s+/g, '-')}.pdf`);
-    
+
     // Pipe PDF to response
     doc.pipe(res);
 
@@ -227,7 +451,7 @@ function generatePDF(doc, resume) {
   // Header - Name and Contact
   doc.fontSize(28).fillColor(color.primary).text(personalInfo.fullName, { align: 'center' });
   doc.moveDown(0.3);
-  
+
   doc.fontSize(10).fillColor(color.secondary);
   const contactInfo = [
     personalInfo.email,
@@ -235,7 +459,7 @@ function generatePDF(doc, resume) {
     personalInfo.location
   ].filter(Boolean).join(' | ');
   doc.text(contactInfo, { align: 'center' });
-  
+
   if (personalInfo.linkedin || personalInfo.github || personalInfo.portfolio) {
     doc.moveDown(0.2);
     const links = [];

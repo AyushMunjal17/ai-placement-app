@@ -11,6 +11,7 @@ import CreateProblem from './pages/CreateProblem'
 import Dashboard from './pages/Dashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import ResumeBuilder from './pages/ResumeBuilder'
+import AIInterview from './pages/AIInterview'
 import VerifyEmail from './pages/VerifyEmail'
 import ForgotPassword from './pages/ForgotPassword'
 import ProtectedRoute from './components/ProtectedRoute'
@@ -67,6 +68,14 @@ function App() {
                 element={
                   <ProtectedRoute>
                     <ResumeBuilder />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/ai-interview" 
+                element={
+                  <ProtectedRoute>
+                    <AIInterview />
                   </ProtectedRoute>
                 } 
               />

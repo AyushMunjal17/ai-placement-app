@@ -34,8 +34,8 @@ const Home = () => {
       title: "One-to-One AI Interview",
       description: "Experience realistic technical interviews with our AI interviewer. Get personalized feedback and improve your interview skills.",
       icon: Brain,
-      status: "coming-soon",
-      link: "#",
+      status: "active",
+      link: "/ai-interview",
       features: [
         "AI-powered mock interviews",
         "Real-time feedback",
@@ -45,8 +45,8 @@ const Home = () => {
     },
     {
       id: 3,
-      title: "AI Resume Maker",
-      description: "Create professional resumes tailored to your target roles using our AI-powered resume builder.",
+      title: "AI Resume Analyzer",
+      description: "Analyze, optimize and create professional resumes tailored to your target roles using our AI-powered analyzer.",
       icon: FileText,
       status: "active",
       link: "/resume-builder",
