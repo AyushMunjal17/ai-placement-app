@@ -30,27 +30,30 @@ const Navbar = () => {
     <nav className="border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto px-4">
         <div className="flex h-16 items-center justify-between">
-          {/* Logo and Brand */}
-          <Link to="/" className="flex items-center space-x-2">
-            <Code className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold">AI Placement System</span>
+          <Link to="/" className="flex items-center space-x-3 group">
+            <div className="p-2 rounded-xl bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <Code className="h-6 w-6 text-primary" />
+            </div>
+            <span className="text-xl font-black tracking-tight uppercase italic pr-1">
+              AI <span className="text-gradient">Placement</span>
+            </span>
           </Link>
 
           {/* Navigation Links */}
-          <div className="hidden md:flex items-center space-x-6">
+          <div className="hidden lg:flex items-center space-x-2">
             <Link 
               to="/" 
-              className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+              className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:bg-white/5 flex items-center gap-2"
             >
-              <Home className="h-4 w-4" />
+              <Home className="h-4 w-4 text-muted-foreground" />
               <span>Home</span>
             </Link>
             
             <Link 
               to="/problems" 
-              className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+              className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:bg-white/5 flex items-center gap-2"
             >
-              <Code className="h-4 w-4" />
+              <Code className="h-4 w-4 text-muted-foreground" />
               <span>Problems</span>
             </Link>
 
@@ -60,36 +63,38 @@ const Navbar = () => {
                   <>
                     <Link 
                       to="/create-problem" 
-                      className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+                      className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:bg-white/5 flex items-center gap-2"
                     >
-                      <PlusCircle className="h-4 w-4" />
-                      <span>Create Problem</span>
+                      <PlusCircle className="h-4 w-4 text-muted-foreground" />
+                      <span>Create</span>
                     </Link>
                     
                     <Link 
                       to="/admin" 
-                      className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+                      className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:bg-white/5 flex items-center gap-2"
                     >
-                      <Shield className="h-4 w-4" />
-                      <span>Admin Dashboard</span>
+                      <Shield className="h-4 w-4 text-muted-foreground" />
+                      <span>Admin</span>
                     </Link>
                   </>
                 ) : (
                   <Link 
                     to="/dashboard" 
-                    className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+                    className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:bg-white/5 flex items-center gap-2"
                   >
-                    <LayoutDashboard className="h-4 w-4" />
+                    <LayoutDashboard className="h-4 w-4 text-muted-foreground" />
                     <span>Dashboard</span>
                   </Link>
                 )}
               </>
             )}
 
-            {/* Coming Soon Links */}
+            <div className="h-4 w-[1px] bg-white/10 mx-2"></div>
+
+            {/* Premium Features */}
             <Link 
               to="/ai-interview" 
-              className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+              className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:bg-primary/10 hover:text-primary flex items-center gap-2 bg-white/5"
             >
               <Brain className="h-4 w-4" />
               <span>AI Interview</span>
@@ -98,16 +103,15 @@ const Navbar = () => {
             {isAuthenticated ? (
               <Link 
                 to="/resume-builder" 
-                className="flex items-center space-x-1 text-sm font-medium transition-colors hover:text-primary"
+                className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:bg-accent/10 hover:text-accent flex items-center gap-2"
               >
                 <FileText className="h-4 w-4" />
-                <span>AI Resume Analyzer</span>
+                <span>Resume Analyzer</span>
               </Link>
             ) : (
-              <div className="flex items-center space-x-1 text-sm font-medium text-muted-foreground cursor-not-allowed">
+              <div className="px-4 py-2 text-sm font-bold text-muted-foreground/40 flex items-center gap-2 cursor-not-allowed">
                 <FileText className="h-4 w-4" />
-                <span>AI Resume Analyzer</span>
-                <span className="text-xs bg-muted px-2 py-1 rounded">Login Required</span>
+                <span>Resume Analyzer</span>
               </div>
             )}
           </div>
@@ -136,44 +140,42 @@ const Navbar = () => {
             </Button>
 
             {isAuthenticated ? (
-              <div className="flex items-center space-x-3">
-                <div className="flex items-center space-x-2">
-                  {user?.role === 'admin' ? (
-                    <Shield className="h-4 w-4 text-blue-600" />
-                  ) : (
+              <div className="flex items-center space-x-4">
+                <div className="hidden sm:flex items-center gap-3 bg-white/5 py-1.5 pl-1.5 pr-4 rounded-full border border-white/10">
+                  <div className="h-8 w-8 rounded-full bg-primary/20 flex items-center justify-center text-primary">
                     <User className="h-4 w-4" />
-                  )}
-                  <span className="text-sm font-medium">
-                    {user?.firstName} {user?.lastName}
-                    <span className="text-xs text-muted-foreground ml-1">
-                      ({user?.role})
-                    </span>
+                  </div>
+                  <span className="text-sm font-bold">
+                    {user?.firstName}
                   </span>
                 </div>
                 <Button 
-                  variant="outline" 
+                  variant="ghost" 
                   size="sm" 
                   onClick={handleLogout}
-                  className="flex items-center space-x-1"
+                  className="rounded-xl px-4 hover:bg-red-500/10 hover:text-red-500 transition-all font-bold"
                 >
-                  <LogOut className="h-4 w-4" />
-                  <span>Logout</span>
+                  <LogOut className="h-4 w-4 mr-2" />
+                  <span className="hidden sm:inline">Logout</span>
                 </Button>
               </div>
             ) : (
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-3">
                 <Button 
                   variant="ghost" 
                   size="sm" 
                   onClick={() => navigate('/login')}
+                  className="font-bold text-sm h-10 px-6 rounded-xl hover:bg-white/5"
                 >
-                  Login
+                  Log In
                 </Button>
                 <Button 
+                  variant="premium"
                   size="sm" 
                   onClick={() => navigate('/register')}
+                  className="h-10 px-6 font-bold"
                 >
-                  Sign Up
+                  Join Now
                 </Button>
               </div>
             )}

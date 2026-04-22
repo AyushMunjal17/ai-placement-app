@@ -42,8 +42,43 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
       },
+      borderRadius: {
+        lg: "var(--radius)",
+        md: "calc(var(--radius) - 2px)",
+        sm: "calc(var(--radius) - 4px)",
+      },
+      keyframes: {
+        "fade-in-up": {
+          "0%": {
+            opacity: "0",
+            transform: "translateY(10px)",
+          },
+          "100%": {
+            opacity: "1",
+            transform: "translateY(0)",
+          },
+        },
+        "slow-glow": {
+          "0%, 100%": {
+            opacity: "0.5",
+          },
+          "50%": {
+            opacity: "1",
+          },
+        },
+      },
+      boxShadow: {
+        glass: "0 8px 32px 0 rgba(0, 0, 0, 0.1)",
+        "glass-dark": "0 8px 32px 0 rgba(0, 0, 0, 0.37)",
+        primary: "0 0 20px -5px hsla(263, 70%, 50%, 0.5)",
+        premium: "0 0 30px -5px hsla(263, 70%, 50%, 0.6)",
+      },
+      animation: {
+        "fade-in-up": "fade-in-up 0.5s ease-out",
+        "slow-glow": "slow-glow 5s ease-in-out infinite",
+      },
     },
   },
-  plugins: [],
+  plugins: [require("tailwindcss-animate")],
 }
 

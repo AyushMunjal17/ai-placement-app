@@ -292,34 +292,38 @@ const Dashboard = () => {
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10 py-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground">
+      <div className="animate-fade-in-up">
+        <h1 className="text-4xl font-bold tracking-tight mb-2">
+          User <span className="text-gradient">Dashboard</span>
+        </h1>
+        <p className="text-muted-foreground text-lg">
           Welcome back, {user?.firstName}! Here's your progress overview.
         </p>
       </div>
 
       {/* Section Switcher */}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap gap-4 animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
         {dashboardSections.map((section) => (
           <button
             key={section.id}
             onClick={() => setActiveSection(section.id)}
-            className={`flex-1 min-w-[220px] rounded-lg border p-4 text-left transition-all ${
+            className={`flex-1 min-w-[220px] rounded-2xl border p-5 text-left transition-all duration-300 ${
               activeSection === section.id
-                ? 'border-primary bg-primary/5 shadow-sm'
-                : 'border-border hover:bg-muted'
+                ? 'border-primary bg-primary/10 shadow-[0_0_20px_rgba(var(--primary),0.1)]'
+                : 'border-white/5 bg-white/5 hover:bg-white/10'
             }`}
           >
-            <div className="flex items-center gap-3">
-              <section.icon className={`h-5 w-5 ${
-                activeSection === section.id ? 'text-primary' : 'text-muted-foreground'
-              }`} />
+            <div className="flex items-center gap-4">
+              <div className={`p-2.5 rounded-xl ${
+                activeSection === section.id ? 'bg-primary text-white' : 'bg-white/10 text-muted-foreground'
+              }`}>
+                <section.icon className="h-5 w-5" />
+              </div>
               <div>
-                <p className="font-semibold">{section.title}</p>
-                <p className="text-xs text-muted-foreground">{section.description}</p>
+                <p className="font-bold text-lg">{section.title}</p>
+                <p className="text-sm text-muted-foreground">{section.description}</p>
               </div>
             </div>
           </button>
@@ -329,18 +333,26 @@ const Dashboard = () => {
       {activeSection === 'overview' && (
         <div className="space-y-6">
           {/* Stats Cards */}
-          <div className="grid md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
             {statsCards.map((stat, index) => (
-              <Card key={index}>
-                <CardContent className="pt-6">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">
-                        {stat.title}
-                      </p>
-                      <p className="text-2xl font-bold">{stat.value}</p>
+              <Card key={index} className="glass-card overflow-hidden group">
+                <CardContent className="p-6 relative">
+                  <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                    <stat.icon className="h-20 w-20" />
+                  </div>
+                  <div className="flex flex-col justify-between h-full relative z-10">
+                    <p className="text-sm font-medium text-muted-foreground mb-4 uppercase tracking-wider">
+                      {stat.title}
+                    </p>
+                    <div className="flex items-end gap-3">
+                      <p className="text-4xl font-black">{stat.value}</p>
+                      {stat.title === "Acceptance Rate" && (
+                        <div className="flex items-center gap-1 text-green-500 text-xs font-bold mb-1.5">
+                          <TrendingUp className="h-3 w-3" />
+                          +2%
+                        </div>
+                      )}
                     </div>
-                    <stat.icon className={`h-8 w-8 ${stat.color}`} />
                   </div>
                 </CardContent>
               </Card>
@@ -348,27 +360,29 @@ const Dashboard = () => {
           </div>
 
           {/* User Info */}
-          <Card>
+          <Card className="glass-card animate-fade-in-up" style={{ animationDelay: '0.3s' }}>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
+              <CardTitle className="flex items-center gap-3 text-2xl font-bold">
+                <div className="p-2 rounded-lg bg-primary/20 text-primary">
+                  <User className="h-5 w-5" />
+                </div>
                 Profile Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Full Name</p>
-                  <p className="text-lg">{user?.firstName} {user?.lastName}</p>
+            <CardContent className="space-y-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="p-4 rounded-xl bg-primary/5 dark:bg-white/5 border border-primary/10 dark:border-white/10">
+                  <p className="text-sm font-medium text-muted-foreground mb-1 uppercase tracking-wider">Full Name</p>
+                  <p className="text-xl font-bold">{user?.firstName} {user?.lastName}</p>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Username</p>
-                  <p className="text-lg">@{user?.username}</p>
+                <div className="p-4 rounded-xl bg-primary/5 dark:bg-white/5 border border-primary/10 dark:border-white/10">
+                  <p className="text-sm font-medium text-muted-foreground mb-1 uppercase tracking-wider">Username</p>
+                  <p className="text-xl font-bold text-primary">@{user?.username}</p>
                 </div>
               </div>
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">Member Since</p>
-                <p className="text-lg">
+              <div className="p-4 rounded-xl bg-primary/5 dark:bg-white/5 border border-primary/10 dark:border-white/10">
+                <p className="text-sm font-medium text-muted-foreground mb-1 uppercase tracking-wider">Member Since</p>
+                <p className="text-xl font-bold">
                   {user?.createdAt ? new Date(user.createdAt).toLocaleDateString('en-US', {
                     year: 'numeric',
                     month: 'long',
@@ -380,20 +394,22 @@ const Dashboard = () => {
           </Card>
 
           {/* Recent Submissions */}
-          <Card>
+          <Card className="glass-card animate-fade-in-up" style={{ animationDelay: '0.4s' }}>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-accent/20 text-accent">
                     <Activity className="h-5 w-5" />
-                    Recent Submissions
-                  </CardTitle>
-                  <CardDescription>
-                    Your latest submission attempts
-                  </CardDescription>
+                  </div>
+                  <div>
+                    <CardTitle className="text-2xl font-bold">Recent Activity</CardTitle>
+                    <CardDescription className="text-muted-foreground font-medium">
+                      Your latest submission attempts
+                    </CardDescription>
+                  </div>
                 </div>
                 <Link to="/problems">
-                  <Button variant="outline" size="sm">
+                  <Button variant="outline" size="sm" className="hidden sm:flex border-primary/10 dark:border-white/10 bg-primary/5 dark:bg-white/5 hover:bg-primary/10 dark:hover:bg-white/10">
                     Solve More Problems
                   </Button>
                 </Link>
@@ -401,59 +417,64 @@ const Dashboard = () => {
             </CardHeader>
             <CardContent>
               {loading ? (
-                <div className="text-center py-8 text-muted-foreground">
-                  Loading submissions...
+                <div className="text-center py-12">
+                  <div className="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto mb-4"></div>
+                  <p className="text-muted-foreground font-medium">Synchronizing data...</p>
                 </div>
               ) : submissions.length === 0 ? (
-                <div className="text-center py-8">
-                  <Code className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <p className="text-muted-foreground mb-4">No submissions yet</p>
+                <div className="text-center py-12 glass-card rounded-2xl border-dashed border-2 border-primary/10 dark:border-white/10">
+                  <Code className="h-16 w-16 mx-auto text-muted-foreground/30 mb-4" />
+                  <p className="text-xl font-bold mb-4">No submissions yet</p>
                   <Link to="/problems">
-                    <Button>Start Solving Problems</Button>
+                    <Button variant="premium">Start Solving Problems</Button>
                   </Link>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-4">
                   {submissions.map((submission) => (
                     <div 
                       key={submission._id} 
-                      className={`p-4 border rounded-lg ${
+                      className={`p-5 glass-card rounded-2xl border-l-4 transition-transform hover:translate-x-1 ${
                         submission.status === 'Accepted' 
-                          ? 'border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/20' 
-                          : 'border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/20'
+                          ? 'border-l-green-500' 
+                          : 'border-l-red-500'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
+                      <div className="flex items-center justify-between gap-4">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-3 mb-2">
                             {submission.status === 'Accepted' ? (
-                              <CheckCircle className="h-5 w-5 text-green-600" />
+                              <div className="h-8 w-8 rounded-lg bg-green-500/20 flex items-center justify-center flex-shrink-0">
+                                <CheckCircle className="h-5 w-5 text-green-500" />
+                              </div>
                             ) : (
-                              <XCircle className="h-5 w-5 text-red-600" />
+                              <div className="h-8 w-8 rounded-lg bg-red-500/20 flex items-center justify-center flex-shrink-0">
+                                <XCircle className="h-5 w-5 text-red-500" />
+                              </div>
                             )}
                             <Link 
                               to={`/problems/${submission.problemId}`}
-                              className="font-medium hover:text-blue-600"
+                              className="font-bold text-lg hover:text-primary transition-colors truncate block"
                             >
                               {submission.problemTitle ? submission.problemTitle.replace(/<[^>]*>/g, '').trim() : 'Untitled Problem'}
                             </Link>
                           </div>
-                          <div className="flex items-center gap-4 mt-2 text-sm text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="h-3 w-3" />
+                          <div className="flex flex-wrap items-center gap-y-2 gap-x-4 text-sm text-muted-foreground font-medium">
+                            <span className="flex items-center gap-1.5 bg-white/5 px-2.5 py-1 rounded-md">
+                              <Calendar className="h-3.5 w-3.5" />
                               {new Date(submission.createdAt).toLocaleDateString()}
                             </span>
-                            <span className="capitalize">{submission.language}</span>
-                            <span>
+                            <span className="capitalize bg-white/5 px-2.5 py-1 rounded-md">{submission.language}</span>
+                            <span className="bg-white/5 px-2.5 py-1 rounded-md">
                               {submission.passedTestCases || 0}/{submission.totalTestCases || 0} test cases
                             </span>
-                            <span>{submission.executionTime || 0}s</span>
+                            <span className="bg-white/5 px-2.5 py-1 rounded-md">{submission.executionTime || 0}s</span>
                           </div>
                         </div>
-                        <span className={`px-3 py-1 rounded text-sm font-medium ${
+                        <span className={`px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-widest ${
                           submission.status === 'Accepted'
-                            ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300'
-                            : 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
+                            ? 'bg-green-500/20 text-green-400 border border-green-500/20'
+                            : 'bg-red-500/20 text-red-400 border border-red-500/20'
                         }`}>
                           {submission.status}
                         </span>
@@ -471,69 +492,75 @@ const Dashboard = () => {
         <div className="space-y-6">
           {/* Monthly Calendar & Problem Types */}
           <div className="grid md:grid-cols-3 gap-6">
+          {/* Monthly Calendar & Problem Types */}
+          <div className="grid md:grid-cols-3 gap-6 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
             {/* Monthly Submission Calendar */}
-            <Card className="md:col-span-2">
+            <Card className="md:col-span-2 glass-card">
               <CardHeader>
                 <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5" />
-                    Submission Calendar
+                  <CardTitle className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400">
+                      <Calendar className="h-5 w-5" />
+                    </div>
+                    Submission Activity
                   </CardTitle>
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 bg-white/5 p-1 rounded-lg border border-white/5">
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
+                      className="h-8 w-8 p-0"
                       onClick={() => {
                         const prevMonth = new Date(selectedMonth)
                         prevMonth.setMonth(prevMonth.getMonth() - 1)
                         setSelectedMonth(prevMonth)
                       }}
                     >
-                      ← Prev
+                      ←
                     </Button>
-                    <span className="px-3 py-1 text-sm font-medium">
+                    <span className="px-3 py-1 text-sm font-bold min-w-[120px] text-center">
                       {monthNames[selectedMonth.getMonth()]} {selectedMonth.getFullYear()}
                     </span>
                     <Button
-                      variant="outline"
+                      variant="ghost"
                       size="sm"
+                      className="h-8 w-8 p-0"
                       onClick={() => {
                         const nextMonth = new Date(selectedMonth)
                         nextMonth.setMonth(nextMonth.getMonth() + 1)
                         setSelectedMonth(nextMonth)
                       }}
                     >
-                      Next →
+                      →
                     </Button>
                   </div>
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
+                <div className="space-y-4">
                   {/* Week day headers */}
-                  <div className="grid grid-cols-7 gap-0.5">
+                  <div className="grid grid-cols-7 gap-1">
                     {weekDays.map(day => (
-                      <div key={day} className="text-[10px] font-medium text-center text-muted-foreground py-1">
+                      <div key={day} className="text-[10px] font-black uppercase tracking-tighter text-center text-muted-foreground/60">
                         {day}
                       </div>
                     ))}
                   </div>
                   
-                  {/* Calendar grid - smaller cells */}
-                  <div className="grid grid-cols-7 gap-0.5">
+                  {/* Calendar grid */}
+                  <div className="grid grid-cols-7 gap-1.5">
                     {generateCalendarGrid().flat().map((dayData, index) => (
                       <div
                         key={index}
-                        className={`h-8 rounded ${
+                        className={`h-10 rounded-lg transition-all duration-300 ${
                           dayData 
-                            ? getIntensityColor(dayData.count) + ' cursor-pointer hover:ring-1 hover:ring-primary border border-transparent hover:border-primary'
+                            ? getIntensityColor(dayData.count) + ' cursor-pointer hover:ring-2 hover:ring-primary border border-white/5'
                             : 'bg-transparent'
-                        } flex items-center justify-center text-[10px] p-0.5`}
+                        } flex items-center justify-center text-xs p-1`}
                         onClick={() => handleDateClick(dayData)}
-                        title={dayData ? `${dayData.date.toLocaleDateString()}: ${dayData.count} submission(s), ${dayData.accepted} accepted` : ''}
+                        title={dayData ? `${dayData.date.toLocaleDateString()}: ${dayData.count} submission(s)` : ''}
                       >
                         {dayData && (
-                          <span className={`font-medium ${dayData.count === 0 ? 'text-muted-foreground' : ''}`}>
+                          <span className={`font-bold ${dayData.count === 0 ? 'text-muted-foreground/40' : 'text-white'}`}>
                             {dayData.day}
                           </span>
                         )}
@@ -541,27 +568,24 @@ const Dashboard = () => {
                     ))}
                   </div>
                   
-                  {/* Legend - compact */}
-                  <div className="flex items-center justify-center gap-3 text-[10px] text-muted-foreground pt-1">
-                    <span>Less</span>
-                    <div className="flex gap-0.5">
-                      <div className="w-2.5 h-2.5 rounded bg-gray-100 dark:bg-gray-800"></div>
-                      <div className="w-2.5 h-2.5 rounded bg-green-200 dark:bg-green-900/30"></div>
-                      <div className="w-2.5 h-2.5 rounded bg-green-400 dark:bg-green-700/50"></div>
-                      <div className="w-2.5 h-2.5 rounded bg-green-600 dark:bg-green-600/70"></div>
-                      <div className="w-2.5 h-2.5 rounded bg-green-800 dark:bg-green-500"></div>
+                  {/* Legend */}
+                  <div className="flex items-center justify-end gap-3 text-[10px] font-bold text-muted-foreground pt-4 border-t border-white/5">
+                    <span>LESS</span>
+                    <div className="flex gap-1">
+                      {[0, 1, 3, 5, 8].map((c) => (
+                        <div key={c} className={`w-3 h-3 rounded-sm ${getIntensityColor(c)} border border-white/5`}></div>
+                      ))}
                     </div>
-                    <span>More</span>
-                    <span className="text-[9px] text-muted-foreground ml-2">Click a day to see problems solved</span>
+                    <span>MORE</span>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
             {/* Problem Types Pie Chart */}
-            <Card>
+            <Card className="glass-card">
               <CardHeader>
-                <CardTitle className="text-base">Problem Types Solved</CardTitle>
+                <CardTitle className="text-xl font-bold">Topics Mastered</CardTitle>
               </CardHeader>
               <CardContent>
                 {problemTypeData.length > 0 ? (
@@ -571,26 +595,29 @@ const Dashboard = () => {
                         data={problemTypeData}
                         cx="50%"
                         cy="50%"
-                        labelLine={false}
-                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                        outerRadius={70}
-                        fill="#8884d8"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={5}
                         dataKey="value"
                       >
                         {problemTypeData.map((entry, index) => (
-                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                          <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="stroke-none" />
                         ))}
                       </Pie>
-                      <Tooltip />
+                      <Tooltip 
+                        contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '12px', color: '#fff' }}
+                        itemStyle={{ color: '#fff' }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm">
-                    No data available
+                  <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm font-medium italic">
+                    No activity recorded yet
                   </div>
                 )}
               </CardContent>
             </Card>
+          </div>
           </div>
 
           {/* Languages Pie Chart */}
