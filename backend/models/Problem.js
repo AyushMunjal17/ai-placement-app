@@ -117,7 +117,7 @@ const problemSchema = new mongoose.Schema({
     type: [testCaseSchema],
     required: true,
     validate: {
-      validator: function(v) {
+      validator: function (v) {
         return v.length >= 1;
       },
       message: 'At least one sample test case is required'
@@ -128,7 +128,7 @@ const problemSchema = new mongoose.Schema({
     type: [hiddenTestCaseSchema],
     required: true,
     validate: {
-      validator: function(v) {
+      validator: function (v) {
         return v.length >= 1;
       },
       message: 'At least one hidden test case is required'
@@ -209,6 +209,10 @@ const problemSchema = new mongoose.Schema({
     c: {
       type: String,
       default: ''
+    },
+    showFullCode: {
+      type: Boolean,
+      default: true
     }
   }
 }, {
@@ -225,14 +229,14 @@ problemSchema.index({ isPublic: 1, isActive: 1 });
 problemSchema.index({ createdAt: -1 });
 
 // Generate slug from title before saving
-problemSchema.pre('save', function(next) {
+problemSchema.pre('save', function (next) {
   if (this.isModified('title') || !this.slug) {
     this.slug = this.title
       .toLowerCase()
       .replace(/[^a-zA-Z0-9\s]/g, '') // Remove special characters
       .replace(/\s+/g, '-') // Replace spaces with hyphens
       .trim();
-    
+
     // Add timestamp to ensure uniqueness
     if (this.isNew) {
       this.slug += '-' + Date.now();
@@ -242,32 +246,32 @@ problemSchema.pre('save', function(next) {
 });
 
 // Virtual for acceptance rate
-problemSchema.virtual('acceptanceRate').get(function() {
+problemSchema.virtual('acceptanceRate').get(function () {
   if (this.totalSubmissions === 0) return 0;
   return ((this.acceptedSubmissions / this.totalSubmissions) * 100).toFixed(2);
 });
 
 // Instance method to get public problem data (without hidden test cases)
-problemSchema.methods.getPublicData = function() {
+problemSchema.methods.getPublicData = function () {
   const problem = this.toObject();
   delete problem.hiddenTestCases; // Remove hidden test cases from public data
   return problem;
 };
 
 // Static method to find problems by difficulty
-problemSchema.statics.findByDifficulty = function(difficulty) {
-  return this.find({ 
+problemSchema.statics.findByDifficulty = function (difficulty) {
+  return this.find({
     difficulty: difficulty,
     isPublic: true,
-    isActive: true 
+    isActive: true
   }).populate('publishedBy', 'username firstName lastName');
 };
 
 // Static method to find problems by publisher
-problemSchema.statics.findByPublisher = function(publisherId) {
-  return this.find({ 
+problemSchema.statics.findByPublisher = function (publisherId) {
+  return this.find({
     publishedBy: publisherId,
-    isActive: true 
+    isActive: true
   }).populate('publishedBy', 'username firstName lastName');
 };
 

@@ -74,7 +74,8 @@ const CreateProblem = () => {
       java: '',
       javascript: '',
       c: ''
-    }
+    },
+    showFullCode: true
   })
 
   const handleInputChange = (e) => {
@@ -395,12 +396,12 @@ const CreateProblem = () => {
         {/* Code Templates (optional) */}
         <Card>
           <CardHeader>
-            <CardTitle>Code Templates (Optional)</CardTitle>
+            <CardTitle>Code Templates</CardTitle>
             <CardDescription>
-              Define language-specific starter code with the exact function signature you want (e.g., <code>int findMax(vector&lt;int&gt; &amp;arr)</code>). Students will see this in the editor.
+              Define the starter code that students will see in the editor. 
               <br />
               <span className="text-xs text-muted-foreground mt-1 block">
-                Use <code className="bg-muted px-1 rounded">STUDENT_CODE_START</code> and <code className="bg-muted px-1 rounded">STUDENT_CODE_END</code> markers to define the editable region. Students will only write code between these markers.
+                Provide a complete function signature or a full boilerplate (including a Main function) for students to work with.
               </span>
             </CardDescription>
           </CardHeader>
@@ -409,77 +410,27 @@ const CreateProblem = () => {
               { 
                 key: 'python', 
                 label: 'Python Template',
-                placeholder: `# STUDENT_CODE_START
-# Students will write their solution here
-# Example: def twoSum(nums, target): ...
-# STUDENT_CODE_END
-
-# Test harness (hidden from students, handled by system)
-if __name__ == "__main__":
-    # System handles input/output and function calling
-    pass`
+                placeholder: `def solve():\n    # Write your solution here\n    pass\n\nif __name__ == "__main__":\n    solve()`
               },
               { 
                 key: 'javascript', 
                 label: 'JavaScript Template',
-                placeholder: `// STUDENT_CODE_START
-// Students will write their solution here
-// Example: function twoSum(nums, target) { ... }
-// STUDENT_CODE_END
-
-// Test harness (hidden from students, handled by system)
-// System handles input/output and function calling`
+                placeholder: `function solve() {\n    // Write your solution here\n}\n\nsolve();`
               },
               { 
                 key: 'java', 
                 label: 'Java Template',
-                placeholder: `// STUDENT_CODE_START
-// Students will write their solution here
-// Example: public int[] twoSum(int[] nums, int target) { ... }
-// STUDENT_CODE_END
-
-// Test harness (hidden from students, handled by system)
-class Main {
-    public static void main(String[] args) {
-        // System handles input/output and method calling
-    }
-}`
+                placeholder: `class Solution {\n    public void solve() {\n        // Write your solution here\n    }\n}\n\nclass Main {\n    public static void main(String[] args) {\n        new Solution().solve();\n    }\n}`
               },
               { 
                 key: 'cpp', 
                 label: 'C++ Template',
-                placeholder: `// Include necessary headers
-#include <vector>
-#include <iostream>
-using namespace std;
-
-// STUDENT_CODE_START
-// Students will write their solution here
-// Example: vector<int> twoSum(vector<int>& nums, int target) { ... }
-// STUDENT_CODE_END
-
-// Test harness (hidden from students, handled by system)
-int main() {
-    // System handles input/output and function calling
-    return 0;
-}`
+                placeholder: `#include <iostream>\nusing namespace std;\n\nvoid solve() {\n    // Write your solution here\n}\n\nint main() {\n    solve();\n    return 0;\n}`
               },
               { 
                 key: 'c', 
                 label: 'C Template',
-                placeholder: `#include <stdio.h>
-#include <stdlib.h>
-
-// STUDENT_CODE_START
-// Students will write their solution here
-// Example: int* twoSum(int* nums, int numsSize, int target, int* returnSize) { ... }
-// STUDENT_CODE_END
-
-// Test harness (hidden from students, handled by system)
-int main() {
-    // System handles input/output and function calling
-    return 0;
-}`
+                placeholder: `#include <stdio.h>\n\nvoid solve() {\n    // Write your solution here\n}\n\nint main() {\n    solve();\n    return 0;\n}`
               }
             ]
             .filter(({ key }) => formData.supportedLanguages.includes(key))
@@ -504,7 +455,7 @@ int main() {
                   className="font-mono text-xs"
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Code between <code className="bg-muted px-1 rounded">STUDENT_CODE_START</code> and <code className="bg-muted px-1 rounded">STUDENT_CODE_END</code> will be editable by students. Everything else is hidden.
+                  Students will be able to edit and run this code directly in the code editor.
                 </p>
               </div>
             ))}

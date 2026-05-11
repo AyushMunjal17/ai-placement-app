@@ -174,11 +174,11 @@ const ProblemDetail = () => {
 
   // Language configurations
   const allLanguages = {
-    python: { id: 71, name: 'Python 3', template: '# Write your solution here\n# Define the required function based on the problem statement\n' },
-    javascript: { id: 63, name: 'JavaScript', template: '// Write your solution here\n// Define the required function based on the problem statement\n' },
-    java: { id: 62, name: 'Java', template: '// Write your solution here\n// Define the required method based on the problem statement\n' },
-    cpp: { id: 54, name: 'C++', template: '// Write your solution here\n// Define the required function based on the problem statement\n' },
-    c: { id: 50, name: 'C', template: '// Write your solution here\n// Define the required function based on the problem statement\n' }
+    python: { id: 71, name: 'Python 3', template: 'def solve():\n    # Write your solution here\n    pass\n\nif __name__ == "__main__":\n    solve()' },
+    javascript: { id: 63, name: 'JavaScript', template: 'function solve() {\n    // Write your solution here\n}\n\nsolve();' },
+    java: { id: 62, name: 'Java', template: 'class Solution {\n    public void solve() {\n        // Write your solution here\n    }\n}\n\nclass Main {\n    public static void main(String[] args) {\n        new Solution().solve();\n    }\n}' },
+    cpp: { id: 54, name: 'C++', template: '#include <iostream>\nusing namespace std;\n\nvoid solve() {\n    // Write your solution here\n}\n\nint main() {\n    solve();\n    return 0;\n}' },
+    c: { id: 50, name: 'C', template: '#include <stdio.h>\n\nvoid solve() {\n    // Write your solution here\n}\n\nint main() {\n    solve();\n    return 0;\n}' }
   }
 
   // Filter languages based on problem's supported languages
@@ -219,18 +219,25 @@ const ProblemDetail = () => {
       Object.entries(allLanguages).filter(([key]) => supportedLangs.includes(key))
     )
 
-    if (availableLanguages[language]) {
-      let baseTemplate
-      if (problem.codeTemplates && problem.codeTemplates[language] && problem.codeTemplates[language].trim().length > 0) {
-        baseTemplate = problem.codeTemplates[language]
-      } else {
-        baseTemplate = availableLanguages[language].template
-      }
+      if (availableLanguages[language]) {
+        let baseTemplate = (problem.codeTemplates && problem.codeTemplates[language]?.trim())
+          ? problem.codeTemplates[language]
+          : availableLanguages[language].template
 
-      const { studentCode } = extractStudentCodeFromTemplate(baseTemplate)
-      setCode(studentCode)
-    }
-  }, [language, problem])
+        if (problem.showFullCode) {
+          // Show full code and strip markers so student doesn't see them
+          const cleanCode = baseTemplate
+            .split('\n')
+            .filter(line => !line.includes(STUDENT_CODE_START) && !line.includes(STUDENT_CODE_END))
+            .join('\n')
+          setCode(cleanCode)
+        } else {
+          // Show only student part (current behavior)
+          const { studentCode } = extractStudentCodeFromTemplate(baseTemplate)
+          setCode(studentCode)
+        }
+      }
+    }, [language, problem])
 
   const fetchProblem = async () => {
     try {
@@ -246,13 +253,21 @@ const ProblemDetail = () => {
         setLanguage(supportedLangs[0])
       }
 
-      const templates = fetchedProblem.codeTemplates || {}
       const currentLang = supportedLangs.includes(language) ? language : supportedLangs[0]
-      const baseTemplate = templates[currentLang] && templates[currentLang].trim().length > 0
+      const baseTemplate = (templates[currentLang] && templates[currentLang].trim().length > 0)
         ? templates[currentLang]
         : allLanguages[currentLang]?.template || allLanguages.python.template
-      const { studentCode } = extractStudentCodeFromTemplate(baseTemplate)
-      setCode(studentCode)
+      
+      if (fetchedProblem.showFullCode) {
+        const cleanCode = baseTemplate
+          .split('\n')
+          .filter(line => !line.includes(STUDENT_CODE_START) && !line.includes(STUDENT_CODE_END))
+          .join('\n')
+        setCode(cleanCode)
+      } else {
+        const { studentCode } = extractStudentCodeFromTemplate(baseTemplate)
+        setCode(studentCode)
+      }
       setError('')
     } catch (err) {
       setError('Failed to load problem. Please try again.')
@@ -363,7 +378,11 @@ const ProblemDetail = () => {
     const baseTemplate = (problem?.codeTemplates && problem.codeTemplates[language] && problem.codeTemplates[language].trim().length > 0)
       ? problem.codeTemplates[language]
       : languages[language].template
-    const finalCode = buildFullCodeFromStudentCode(baseTemplate, code)
+    
+    // If showing full code, we don't wrap (student already has full code or we trust their submission)
+    const finalCode = problem?.showFullCode 
+      ? code 
+      : buildFullCodeFromStudentCode(baseTemplate, code)
 
     try {
       const response = await axios.post('/submissions/run', {
@@ -473,7 +492,10 @@ const ProblemDetail = () => {
     const baseTemplate = (problem?.codeTemplates && problem.codeTemplates[language] && problem.codeTemplates[language].trim().length > 0)
       ? problem.codeTemplates[language]
       : languages[language].template
-    const finalCode = buildFullCodeFromStudentCode(baseTemplate, code)
+    
+    const finalCode = problem?.showFullCode
+      ? code
+      : buildFullCodeFromStudentCode(baseTemplate, code)
 
     // Helper to process a completed result object
     const handleResult = (data) => {
