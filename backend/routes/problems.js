@@ -355,7 +355,7 @@ router.post('/', authenticateToken, isAdmin, async (req, res) => {
 // @route   GET /api/problems/user/my-problems
 // @desc    Get current user's published problems
 // @access  Private
-router.get('/user/my-problems', authenticateToken, async (req, res) => {
+router.get('/user/my-problems', authenticateToken, requireEmailVerified, async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);

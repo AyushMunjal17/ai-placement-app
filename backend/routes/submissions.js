@@ -3,7 +3,7 @@ const axios = require('axios');
 const mongoose = require('mongoose');
 const Submission = require('../models/Submission');
 const Problem = require('../models/Problem');
-const { authenticateToken } = require('../middlewares/auth');
+const { authenticateToken, requireEmailVerified } = require('../middlewares/auth');
 const submissionQueue = require('../queues/submissionQueue');
 
 const router = express.Router();
@@ -50,7 +50,7 @@ router.get('/test-executor', async (req, res) => {
 // @route   GET /api/submissions/test-judge0
 // @desc    Test Judge0 API connection
 // @access  Private
-router.get('/test-judge0', authenticateToken, async (req, res) => {
+router.get('/test-judge0', authenticateToken, requireEmailVerified, async (req, res) => {
   try {
     if (!JUDGE0_API_KEY) {
       return res.status(500).json({
@@ -198,7 +198,7 @@ const executeCodeBatch = async (code, languageId, inputs = []) => {
 // @route   POST /api/submissions/run
 // @desc    Run code with sample test cases validation
 // @access  Private
-router.post('/run', authenticateToken, async (req, res) => {
+router.post('/run', authenticateToken, requireEmailVerified, async (req, res) => {
   try {
     const { code, language_id, problemId, stdin = '' } = req.body;
 
@@ -313,7 +313,7 @@ router.post('/run', authenticateToken, async (req, res) => {
 // @route   GET /api/submissions/result/:jobId
 // @desc    Poll for async submission result (used by frontend after POST /submit)
 // @access  Private
-router.get('/result/:jobId', authenticateToken, async (req, res) => {
+router.get('/result/:jobId', authenticateToken, requireEmailVerified, async (req, res) => {
   const { jobId } = req.params;
 
   try {
@@ -367,7 +367,7 @@ router.get('/result/:jobId', authenticateToken, async (req, res) => {
 // @route   POST /api/submissions/submit
 // @desc    Submit solution — ASYNC: pushes job to Redis queue, returns jobId immediately
 // @access  Private
-router.post('/submit', authenticateToken, async (req, res) => {
+router.post('/submit', authenticateToken, requireEmailVerified, async (req, res) => {
   try {
     const { problemId, code, language_id } = req.body;
 
@@ -435,7 +435,7 @@ router.post('/submit', authenticateToken, async (req, res) => {
 // @route   GET /api/submissions/my-submissions
 // @desc    Get all submissions for the logged-in user
 // @access  Private
-router.get('/my-submissions', authenticateToken, async (req, res) => {
+router.get('/my-submissions', authenticateToken, requireEmailVerified, async (req, res) => {
   try {
     const submissions = await Submission.find({
       userId: req.user._id
@@ -494,7 +494,7 @@ router.get('/problem/:problemId', authenticateToken, async (req, res) => {
 // @route   POST /api/submissions  (legacy — kept for backwards compat, redirects to /submit logic)
 // @desc    Submit code for execution
 // @access  Private
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', authenticateToken, requireEmailVerified, async (req, res) => {
   try {
     const { problemId, code, language } = req.body;
 
@@ -620,7 +620,7 @@ router.post('/', authenticateToken, async (req, res) => {
 // @route   GET /api/submissions/:id
 // @desc    Get submission details
 // @access  Private
-router.get('/:id', authenticateToken, async (req, res) => {
+router.get('/:id', authenticateToken, requireEmailVerified, async (req, res) => {
   try {
     const submissionId = req.params.id;
 
@@ -668,7 +668,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
 // @route   GET /api/submissions/user/my-submissions
 // @desc    Get current user's submissions
 // @access  Private
-router.get('/user/my-submissions', authenticateToken, async (req, res) => {
+router.get('/user/my-submissions', authenticateToken, requireEmailVerified, async (req, res) => {
   try {
     const { page = 1, limit = 20, problemId } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);

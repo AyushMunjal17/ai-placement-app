@@ -9,7 +9,7 @@ const authenticateToken = async (req, res, next) => {
     const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
     if (!token) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         message: 'Access token is required',
         error: 'NO_TOKEN'
       });
@@ -17,19 +17,19 @@ const authenticateToken = async (req, res, next) => {
 
     // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
+
     // Get user from database
     const user = await User.findById(decoded.userId).select('-password');
-    
+
     if (!user) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         message: 'Invalid token - user not found',
         error: 'USER_NOT_FOUND'
       });
     }
 
     if (!user.isActive) {
-      return res.status(401).json({ 
+      return res.status(401).json({
         message: 'Account is deactivated',
         error: 'ACCOUNT_DEACTIVATED'
       });
@@ -40,21 +40,21 @@ const authenticateToken = async (req, res, next) => {
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
+      return res.status(401).json({
         message: 'Invalid token',
         error: 'INVALID_TOKEN'
       });
     }
-    
+
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
+      return res.status(401).json({
         message: 'Token has expired',
         error: 'TOKEN_EXPIRED'
       });
     }
 
     console.error('Auth middleware error:', error);
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: 'Authentication error',
       error: 'AUTH_ERROR'
     });
@@ -64,9 +64,20 @@ const authenticateToken = async (req, res, next) => {
 // Middleware to check if user is admin (for future features)
 const requireAdmin = (req, res, next) => {
   if (req.user.role !== 'admin') {
-    return res.status(403).json({ 
+    return res.status(403).json({
       message: 'Admin access required',
       error: 'INSUFFICIENT_PERMISSIONS'
+    });
+  }
+  next();
+};
+
+// Middleware to check if email is verified
+const requireEmailVerified = (req, res, next) => {
+  if (!req.user.isEmailVerified) {
+    return res.status(403).json({
+      message: 'Email verification required. Please verify your email to access this feature.',
+      error: 'EMAIL_NOT_VERIFIED'
     });
   }
   next();
@@ -81,12 +92,12 @@ const optionalAuth = async (req, res, next) => {
     if (token) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       const user = await User.findById(decoded.userId).select('-password');
-      
+
       if (user && user.isActive) {
         req.user = user;
       }
     }
-    
+
     next();
   } catch (error) {
     // Continue without authentication if token is invalid
@@ -99,7 +110,7 @@ const generateToken = (userId) => {
   return jwt.sign(
     { userId },
     process.env.JWT_SECRET,
-    { 
+    {
       expiresIn: '7d', // Token expires in 7 days
       issuer: 'ai-placement-system',
       audience: 'ai-placement-users'
@@ -119,6 +130,7 @@ const verifyToken = (token) => {
 module.exports = {
   authenticateToken,
   requireAdmin,
+  requireEmailVerified,
   optionalAuth,
   generateToken,
   verifyToken

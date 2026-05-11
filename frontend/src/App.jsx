@@ -37,8 +37,22 @@ function App() {
                   </ProtectedRoute>
                 } 
               />
-              <Route path="/problems" element={<Problems />} />
-              <Route path="/problems/:id" element={<ProblemDetail />} />
+              <Route 
+                path="/problems" 
+                element={
+                  <ProtectedRoute>
+                    <Problems />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="/problems/:id" 
+                element={
+                  <ProtectedRoute>
+                    <ProblemDetail />
+                  </ProtectedRoute>
+                } 
+              />
               <Route 
                 path="/create-problem" 
                 element={
