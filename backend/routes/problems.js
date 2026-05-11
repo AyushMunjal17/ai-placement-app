@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const Problem = require('../models/Problem');
 const User = require('../models/User');
 const Submission = require('../models/Submission');
-const { authenticateToken, optionalAuth } = require('../middlewares/auth');
+const { authenticateToken, requireEmailVerified, optionalAuth } = require('../middlewares/auth');
 const { isAdmin } = require('../middlewares/adminAuth');
 
 const router = express.Router();
