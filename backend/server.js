@@ -159,6 +159,33 @@ app.use((err, req, res, next) => {
   });
 });
 
+// ─── Keep-Alive Mechanism (Render Free Tier) ──────────────────────────────────
+if (!IS_SERVERLESS) {
+  const BACKEND_URL = process.env.BACKEND_URL;
+  const CODE_EXECUTOR_URL = process.env.CODE_EXECUTOR_URL || 'https://code-executor-u3jg.onrender.com';
+
+  if (BACKEND_URL) {
+    console.log(`📡 Keep-alive enabled for: ${BACKEND_URL}`);
+    setInterval(() => {
+      // Self-ping
+      http.get(`${BACKEND_URL.replace(/\/$/, '')}/api/health`, (res) => {
+        console.log(`[keep-alive] Self-ping status: ${res.statusCode}`);
+      }).on('error', (err) => {
+        console.error('[keep-alive] Self-ping error:', err.message);
+      });
+
+      // Ping code-executor
+      http.get(`${CODE_EXECUTOR_URL.replace(/\/$/, '')}/`, (res) => {
+        console.log(`[keep-alive] Code executor ping status: ${res.statusCode}`);
+      }).on('error', (err) => {
+        console.error('[keep-alive] Code executor ping error:', err.message);
+      });
+    }, 14 * 60 * 1000); // Every 14 minutes
+  } else {
+    console.warn('⚠️  WARNING: BACKEND_URL not set. Self-ping keep-alive is disabled.');
+  }
+}
+
 // ─── Startup (persistent-server mode only) ────────────────────────────────────
 if (!IS_SERVERLESS) {
   const PORT = process.env.PORT || 5000;
