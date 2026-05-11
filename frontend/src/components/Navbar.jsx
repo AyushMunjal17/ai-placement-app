@@ -103,7 +103,7 @@ const Navbar = () => {
             {isAuthenticated ? (
               <Link 
                 to="/resume-builder" 
-                className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:bg-accent/10 hover:text-accent flex items-center gap-2"
+                className="px-4 py-2 rounded-xl text-sm font-bold transition-all hover:bg-primary/10 hover:text-primary flex items-center gap-2 bg-white/5"
               >
                 <FileText className="h-4 w-4" />
                 <span>Resume Analyzer</span>
