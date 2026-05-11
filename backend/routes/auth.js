@@ -118,7 +118,7 @@ router.post('/register', async (req, res) => {
     const userData = user.getPublicProfile();
 
     // Different message for admin requests
-    const message = role === 'admin' 
+    const message = role === 'admin'
       ? 'Your admin account request has been submitted and is pending approval. Please verify your email to complete registration.'
       : 'Registration successful! Please check your email for the verification OTP.';
 
@@ -133,7 +133,7 @@ router.post('/register', async (req, res) => {
 
   } catch (error) {
     console.error('Registration error:', error);
-    
+
     // Handle mongoose validation errors
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
@@ -172,7 +172,7 @@ router.post('/login', async (req, res) => {
     // Find user by email or username
     console.log('🔍 Looking for user with identifier:', identifier);
     const user = await User.findByEmailOrUsername(identifier);
-    
+
     if (!user) {
       console.log('❌ User not found with identifier:', identifier);
       return res.status(401).json({
@@ -198,7 +198,7 @@ router.post('/login', async (req, res) => {
     console.log('🔐 Checking password...');
     const isPasswordValid = await user.comparePassword(password);
     console.log('🔐 Password valid:', isPasswordValid);
-    
+
     if (!isPasswordValid) {
       console.log('❌ Invalid password');
       return res.status(401).json({
@@ -209,19 +209,8 @@ router.post('/login', async (req, res) => {
 
     console.log('✅ Login successful for user:', user.email);
 
-    // Check if email is verified
-    // Allow legacy accounts (created before email verification feature) to login
-    // Legacy accounts have emailVerificationOTP as null (never set)
+    // Allow login for all accounts, but track if it's a legacy account for auto-verification
     const isLegacyAccount = user.emailVerificationOTP === null && user.emailVerificationOTPExpires === null;
-    
-    if (!user.isEmailVerified && !isLegacyAccount) {
-      // For new accounts that need verification
-      return res.status(403).json({
-        message: 'Please verify your email address before logging in. Check your email for the OTP.',
-        error: 'EMAIL_NOT_VERIFIED',
-        requiresVerification: true
-      });
-    }
 
     // Auto-verify legacy accounts on first login (backward compatibility)
     if (isLegacyAccount && !user.isEmailVerified) {
@@ -303,7 +292,7 @@ router.put('/profile', authenticateToken, async (req, res) => {
 
   } catch (error) {
     console.error('Profile update error:', error);
-    
+
     if (error.name === 'ValidationError') {
       const errors = Object.values(error.errors).map(err => err.message);
       return res.status(400).json({
@@ -401,7 +390,7 @@ router.post('/send-verification-otp', authenticateToken, async (req, res) => {
     if (user.emailVerificationOTPExpires) {
       const timeSinceLastOTP = Date.now() - user.emailVerificationOTPExpires.getTime() + (10 * 60 * 1000);
       const secondsSinceLastOTP = Math.floor(timeSinceLastOTP / 1000);
-      
+
       if (secondsSinceLastOTP < 60) {
         const remainingSeconds = 60 - secondsSinceLastOTP;
         return res.status(429).json({
@@ -423,7 +412,7 @@ router.post('/send-verification-otp', authenticateToken, async (req, res) => {
 
     // Send OTP email
     const emailResult = await sendOTPEmail(user.email, otp, user.firstName);
-    
+
     if (!emailResult.success) {
       return res.status(500).json({
         message: 'Failed to send verification email. Please try again later.',
@@ -540,7 +529,7 @@ router.post('/forgot-password', async (req, res) => {
 
     // Find user by email
     const user = await User.findOne({ email: email.toLowerCase() });
-    
+
     // Always return success message (security: don't reveal if email exists)
     if (!user) {
       return res.json({
@@ -560,7 +549,7 @@ router.post('/forgot-password', async (req, res) => {
     if (user.resetPasswordOTPExpires) {
       const timeSinceLastOTP = Date.now() - user.resetPasswordOTPExpires.getTime() + (10 * 60 * 1000);
       const secondsSinceLastOTP = Math.floor(timeSinceLastOTP / 1000);
-      
+
       if (secondsSinceLastOTP < 60) {
         const remainingSeconds = 60 - secondsSinceLastOTP;
         return res.status(429).json({
@@ -582,7 +571,7 @@ router.post('/forgot-password', async (req, res) => {
 
     // Send password reset OTP email
     const emailResult = await sendPasswordResetOTP(user.email, otp, user.firstName);
-    
+
     if (!emailResult.success) {
       return res.status(500).json({
         message: 'Failed to send password reset email. Please try again later.',
@@ -634,7 +623,7 @@ router.post('/reset-password', async (req, res) => {
 
     // Find user by email
     const user = await User.findOne({ email: email.toLowerCase() });
-    
+
     if (!user) {
       return res.status(404).json({
         message: 'Invalid email or OTP',
