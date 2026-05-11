@@ -594,9 +594,11 @@ const Dashboard = () => {
                         cx="50%"
                         cy="50%"
                         innerRadius={60}
-                        outerRadius={80}
+                        outerRadius={70}
                         paddingAngle={5}
                         dataKey="value"
+                        label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                        labelLine={false}
                       >
                         {problemTypeData.map((entry, index) => (
                           <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} className="stroke-none" />
@@ -606,6 +608,7 @@ const Dashboard = () => {
                         contentStyle={{ backgroundColor: 'rgba(0,0,0,0.8)', border: 'none', borderRadius: '12px', color: '#fff' }}
                         itemStyle={{ color: '#fff' }}
                       />
+                      <Legend />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
