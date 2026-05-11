@@ -491,11 +491,9 @@ const Dashboard = () => {
       {activeSection === 'insights' && (
         <div className="space-y-6">
           {/* Monthly Calendar & Problem Types */}
-          <div className="grid md:grid-cols-3 gap-6">
-          {/* Monthly Calendar & Problem Types */}
-          <div className="grid md:grid-cols-3 gap-6 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
+          <div className="grid lg:grid-cols-3 gap-8 animate-fade-in-up" style={{ animationDelay: '0.5s' }}>
             {/* Monthly Submission Calendar */}
-            <Card className="md:col-span-2 glass-card">
+            <Card className="lg:col-span-2 glass-card">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="flex items-center gap-3">
@@ -589,7 +587,7 @@ const Dashboard = () => {
               </CardHeader>
               <CardContent>
                 {problemTypeData.length > 0 ? (
-                  <ResponsiveContainer width="100%" height={200}>
+                  <ResponsiveContainer width="100%" height={250}>
                     <PieChart>
                       <Pie
                         data={problemTypeData}
@@ -617,7 +615,6 @@ const Dashboard = () => {
                 )}
               </CardContent>
             </Card>
-          </div>
           </div>
 
           {/* Languages Pie Chart */}
